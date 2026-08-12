@@ -22,6 +22,15 @@ class OrganizationListSerializer(serializers.ModelSerializer):
         return OrganizationListSerializer(obj.children.all(), many=True).data
 
 
+class OrganizationSummarySerializer(serializers.ModelSerializer):
+    """İnzibatçı Paneli -> İcazələrin idarə edilməsi siyahısı üçün (Image 4)."""
+    user_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Organization
+        fields = ["id", "full_name", "voen", "parent", "user_count"]
+
+
 class OrganizationDetailSerializer(serializers.ModelSerializer):
     authorized_persons = AuthorizedPersonSerializer(many=True, required=False)
 

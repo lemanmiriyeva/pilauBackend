@@ -41,6 +41,26 @@ inzibatci, _ = Module.objects.get_or_create(
     },
 )
 
+# --- 'İnzibatçı paneli' altinda alt-modullar (Image 1) ---
+Module.objects.get_or_create(
+    key="istifadeciler", parent=inzibatci,
+    defaults={
+        "title": "İstifadəçilər",
+        "description": "Sistemə yeni istifadəçilərin qeydiyyatı, mövcud istifadəçilərin redaktəsi.",
+        "icon": "manage_accounts",
+        "order": 1,
+    },
+)
+Module.objects.get_or_create(
+    key="icazelerin-idaresi", parent=inzibatci,
+    defaults={
+        "title": "İcazələrin idarə edilməsi",
+        "description": "İstifadəçi və təşkilatlara modullara giriş icazələrinin verilməsi və idarə edilməsi.",
+        "icon": "description",
+        "order": 2,
+    },
+)
+
 # --- 'Lisenziya' altinda alt-modullar ---
 Module.objects.get_or_create(
     key="istehsal", parent=lisenziya,

@@ -53,27 +53,60 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "is_locked", "totp_confirmed", "date_joined"]
 
 
+class UserListSerializer(serializers.ModelSerializer):
+    """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2) üçün."""
+    full_name = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source="organization.full_name", read_only=True, default="")
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "full_name", "first_name", "last_name", "username", "email", "phone",
+            "organization", "organization_name", "fin_kod", "id_card_serial",
+            "is_active", "is_locked", "date_joined",
+        ]
+
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip() or obj.username
+
+
 class CreateUserSerializer(serializers.ModelSerializer):
-    """Yeni istifadəçi yaratmaq üçün (Image 1-dəki form) - admin/idarəçi tərəfindən istifadə olunur."""
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    """Yeni istifadəçi yaratmaq üçün (Image 3-dəki form) - admin/idarəçi tərəfindən istifadə olunur.
+
+    'password' göndərilməsə, təsadüfi şifrə yaradılır və istifadəçiyə şifrə-təyini e-poçtu göndərilir
+    (dizaynda parol sahəsi yoxdur - Image 3).
+    'modules' - Image 3-dəki 'İcazə veriləcək modulları seçin' + 'Status' (Baxış/Redaktə/Təsdiq)
+    hissəsi üçün, [{"module": <id>, "can_view": bool, "can_edit": bool, "can_approve": bool}, ...]
+    """
+    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
+    modules = serializers.ListField(child=serializers.DictField(), required=False, write_only=True)
 
     class Meta:
         model = User
         fields = [
             "id", "first_name", "last_name", "username", "email", "phone",
-            "organization", "fin_kod", "id_card_serial", "password",
+            "organization", "fin_kod", "id_card_serial", "password", "modules",
         ]
 
     def validate_password(self, value):
-        validate_password(value)
+        if value:
+            validate_password(value)
         return value
 
-    def create(self, validated_data):
-        password = validated_data.pop("password")
-        user = User(**validated_data)
-        user.set_password(password)
-        user.save()
-        return user
+
+class UserAdminUpdateSerializer(serializers.ModelSerializer):
+    """İnzibatçı Paneli -> İstifadəçi redaktəsi üçün (Image 2 'Redaktə' / status dəyişimi)."""
+
+    class Meta:
+        model = User
+        fields = [
+            "first_name", "last_name", "email", "phone", "organization",
+            "fin_kod", "id_card_serial", "is_active",
+        ]
+        extra_kwargs = {field: {"required": False} for field in [
+            "first_name", "last_name", "email", "phone", "organization",
+            "fin_kod", "id_card_serial", "is_active",
+        ]}
 
 
 class AdminResetTOTPSerializer(serializers.Serializer):

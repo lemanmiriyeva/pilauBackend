@@ -1,6 +1,7 @@
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +19,8 @@ from .serializers import (
     TOTPSetupConfirmSerializer,
     TOTPVerifySerializer,
     UnlockUserSerializer,
+    UserAdminUpdateSerializer,
+    UserListSerializer,
     UserSerializer,
 )
 from .utils import (
@@ -284,16 +287,99 @@ class MeView(APIView):
 # ---------------------------------------------------------------------------
 
 class CreateUserView(APIView):
-    """Image 1-dəki 'Yeni istifadəçi' formu. Yalnız admin/idarəçi çağıra bilər."""
+    """Image 3-dəki 'Yeni istifadəçi' formu. Yalnız admin/idarəçi çağıra bilər.
+
+    Dizaynda şifrə sahəsi yoxdur -> şifrə göndərilməzsə təsadüfi generasiya olunur və
+    istifadəçiyə (mövcud 'şifrə unutdum' axını ilə eyni) e-poçtla şifrə-təyini kodu göndərilir.
+    'İcazə veriləcək modullar' + 'Status' (Baxış/Redaktə/Təsdiq) seçimləri varsa,
+    UserModulePermission qeydləri də bu zaman yaradılır.
+    """
     permission_classes = [IsAdminUser]
 
     def post(self, request):
+        from permissions_module.models import Module, UserModulePermission
+
         serializer = CreateUserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        data = dict(serializer.validated_data)
+
+        modules_data = data.pop("modules", []) or []
+        password = data.pop("password", "") or generate_temp_password()
+
+        user = User(**data)
+        user.set_password(password)
+        user.save()
+
+        for item in modules_data:
+            module = Module.objects.filter(id=item.get("module")).first()
+            if not module:
+                continue
+            UserModulePermission.objects.update_or_create(
+                user=user, module=module,
+                defaults={
+                    "can_view": bool(item.get("can_view", False)),
+                    "can_edit": bool(item.get("can_edit", False)),
+                    "can_approve": bool(item.get("can_approve", False)),
+                    "granted_by": request.user,
+                },
+            )
+
+        code = generate_numeric_code(6)
+        PasswordResetCode.objects.create(
+            user=user,
+            code_hash=hash_code(code),
+            expires_at=timezone.now() + timezone.timedelta(
+                minutes=settings.PASSWORD_RESET_CODE_TTL_MINUTES
+            ),
+            requested_ip=get_client_ip(request),
+        )
+        send_mail_to(
+            user.email, "Hesabınız yaradıldı",
+            f"Sizin üçün sistemdə hesab yaradıldı (istifadəçi adı: {user.username}).\n"
+            f"Şifrənizi təyin etmək üçün kod: {code}\n"
+            f"Kod {settings.PASSWORD_RESET_CODE_TTL_MINUTES} dəqiqə etibarlıdır.",
+        )
+
         log_security_event("USER_CREATED", user=request.user, ip=get_client_ip(request),
                             extra=f"created_user={user.username}")
-        return Response(UserSerializer(user).data, status=201)
+        return Response(UserListSerializer(user).data, status=201)
+
+
+class UserListView(generics.ListAPIView):
+    """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2)."""
+    permission_classes = [IsAdminUser]
+    serializer_class = UserListSerializer
+
+    def get_queryset(self):
+        qs = User.objects.select_related("organization").order_by("first_name", "last_name", "username")
+        organization_id = self.request.query_params.get("organization")
+        search = self.request.query_params.get("search")
+        if organization_id:
+            qs = qs.filter(organization_id=organization_id)
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search) | Q(last_name__icontains=search)
+                | Q(email__icontains=search) | Q(username__icontains=search)
+            )
+        return qs
+
+
+class UserAdminDetailView(generics.RetrieveUpdateAPIView):
+    """İnzibatçı Paneli -> İstifadəçi redaktəsi və status (Aktiv/Deaktiv) dəyişimi (Image 2)."""
+    permission_classes = [IsAdminUser]
+    queryset = User.objects.select_related("organization")
+
+    def get_serializer_class(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return UserAdminUpdateSerializer
+        return UserListSerializer
+
+    def perform_update(self, serializer):
+        user = serializer.save()
+        log_security_event(
+            "ADMIN_USER_UPDATED", user=self.request.user, ip=get_client_ip(self.request),
+            extra=f"target={user.username} is_active={user.is_active}",
+        )
 
 
 class AdminUnlockUserView(APIView):
@@ -347,3 +433,12 @@ class AdminResetTOTPView(APIView):
 def secrets_token() -> str:
     import secrets
     return secrets.token_hex(4)
+
+
+def generate_temp_password() -> str:
+    """İstifadəçi yaradılarkən şifrə göndərilməyibsə - istifadəçi görməyəcək, e-poçtla şifrə-təyini
+    kodu göndəriləcək (aşağıda) - ona görə mürəkkəblik siyasətinə cavab verən təsadüfi dəyər kifayətdir."""
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits + "!@#$%*"
+    return "".join(secrets.choice(alphabet) for _ in range(16))
