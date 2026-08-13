@@ -31,6 +31,7 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv(
 AUTH_USER_MODEL = "authentication.User"
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -141,8 +142,8 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=12),
-    "REFRESH_TOKEN_LIFETIME": timedelta(hours=8),
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),  
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
@@ -223,6 +224,90 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------------------------------
+# Jazzmin - admin panel görünüşü
+# --------------------------------------------------------------------------
+JAZZMIN_SETTINGS = {
+    "site_title": "MSN İnzibatçı Paneli",
+    "site_header": "MSN İdarəetmə",
+    "site_brand": "MSN Admin",
+    "welcome_sign": "MSN İnzibatçı panelinə xoş gəldiniz",
+    "copyright": "Azərbaycan Respublikasının Müdafiə Sənayesi Nazirliyi",
+    "search_model": ["authentication.User", "organizations.Organization", "permissions_module.Module"],
+    "user_avatar": None,
+
+    "topmenu_links": [
+        {"name": "Sayt", "url": "/", "new_window": True},
+        {"model": "authentication.User"},
+        {"app": "permissions_module"},
+    ],
+
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    "order_with_respect_to": [
+        "authentication", "organizations", "permissions_module", "audit",
+    ],
+
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "authentication.User": "fas fa-user",
+        "authentication.PasswordResetCode": "fas fa-key",
+        "organizations.Organization": "fas fa-building",
+        "organizations.AuthorizedPerson": "fas fa-id-badge",
+        "permissions_module.Module": "fas fa-sitemap",
+        "permissions_module.UserModulePermission": "fas fa-user-shield",
+        "audit.AuditLog": "fas fa-history",
+    },
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+
+    "related_modal_active": True,
+    "custom_css": None,
+    "custom_js": None,
+    "use_google_fonts_cdn": True,
+    "show_ui_builder": False,
+
+    "changeform_format": "horizontal_tabs",
+    "changeform_format_overrides": {
+        "authentication.User": "collapsible",
+        "permissions_module.Module": "collapsible",
+    },
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-navy",
+    "accent": "accent-navy",
+    "navbar": "navbar-navy navbar-dark",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-navy",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "default",
+    "dark_mode_theme": None,
+    "button_classes": {
+        "primary": "btn-navy",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
+}
 
 # --------------------------------------------------------------------------
 # Logging - butun autentifikasiya hadiseleri console/fayla yazilir

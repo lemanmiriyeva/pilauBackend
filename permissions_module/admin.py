@@ -5,10 +5,8 @@ from .models import Module, UserModulePermission
 
 @admin.register(Module)
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ("title", "parent", "key", "icon", "order")
-    list_filter = ("parent",)
-    search_fields = ("title", "key")
-    autocomplete_fields = ["parent"]
+    list_display = ("title", "key", "order")
+    search_fields = ['title', 'key']
 
 
 @admin.register(UserModulePermission)
