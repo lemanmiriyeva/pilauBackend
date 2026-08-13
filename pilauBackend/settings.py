@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "organizations",
     "permissions_module",
     "audit",
+    "licenses",
 ]
 
 MIDDLEWARE = [
@@ -142,7 +143,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),  
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -223,7 +224,12 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Fayl yükləmə həddi (icazə sənədi faylları üçün) - field_schema.py-dəki max_size_mb ilə uyğun
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 # --------------------------------------------------------------------------
 # Jazzmin - admin panel görünüşü
