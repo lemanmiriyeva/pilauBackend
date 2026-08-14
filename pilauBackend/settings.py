@@ -1,9 +1,11 @@
 """
 Django settings - maksimum tehlukesizlik konfiqurasiyasi ile.
 """
+import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from decouple import Config, Csv, RepositoryEnv,config
 from tutorial.settings import ALLOWED_HOSTS
 
@@ -89,14 +91,11 @@ WSGI_APPLICATION = "pilauBackend.wsgi.application"
 # --------------------------------------------------------------------------
 if DJANGO_ENV == "production":
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": config("DB_NAME"),
-            "USER": config("DB_USER"),
-            "PASSWORD": config("DB_PASSWORD"),
-            "HOST": config("DB_HOST"),
-            "PORT": config("DB_PORT", default="5432"),
-        }
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True
+        )
     }
 else:
     DATABASES = {
