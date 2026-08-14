@@ -42,12 +42,48 @@ class ChangePasswordSerializer(serializers.Serializer):
         return value
 
 
+class FirstLoginPasswordSetSerializer(serializers.Serializer):
+    """İlk giriş - admin tərəfindən yaradılan istifadəçi kodsuz, birbaşa yeni şifrə təyin edir."""
+    temp_token = serializers.CharField()
+    new_password = serializers.CharField(trim_whitespace=False)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
+
+
+class SelfProfileUpdateSerializer(serializers.ModelSerializer):
+    """Şəxsi kabinet - istifadəçinin öz məlumatlarını redaktə etməsi üçün (Image 4).
+    Təşkilat, istifadəçi adı və status kimi sahələr buradan dəyişilmir."""
+
+    class Meta:
+        model = User
+        fields = [
+            "first_name", "last_name", "phone", "email",
+            "fin_kod", "id_card_serial", "department", "position",
+        ]
+        extra_kwargs = {field: {"required": False} for field in [
+            "first_name", "last_name", "phone", "email",
+            "fin_kod", "id_card_serial", "department", "position",
+        ]}
+
+
+class UserOrganizationSerializer(serializers.Serializer):
+    """Şəxsi kabinet - 'Təşkilat' bölməsi üçün yığcam, read-only görünüş (Image 4)."""
+    id = serializers.IntegerField()
+    full_name = serializers.CharField()
+    voen = serializers.CharField()
+
+
 class UserSerializer(serializers.ModelSerializer):
+    organization_detail = UserOrganizationSerializer(source="organization", read_only=True)
+
     class Meta:
         model = User
         fields = [
             "id", "first_name", "last_name", "username", "email", "phone",
-            "organization", "fin_kod", "id_card_serial",
+            "organization", "organization_detail", "fin_kod", "id_card_serial",
+            "department", "position",
             "is_active", "is_locked", "totp_confirmed", "date_joined",
         ]
         read_only_fields = ["id", "is_locked", "totp_confirmed", "date_joined"]

@@ -1,11 +1,9 @@
 """
 Django settings - maksimum tehlukesizlik konfiqurasiyasi ile.
 """
-import os
 from datetime import timedelta
 from pathlib import Path
 
-import dj_database_url
 from decouple import Config, Csv, RepositoryEnv,config
 from tutorial.settings import ALLOWED_HOSTS
 
@@ -14,14 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # python-decouple-in defolt config() funksiyasi .env-i CWD-den (serveri hardan ise
 # saldiginizdan) axtarir - bu, IDE/terminal-dan asili olaraq tapilmamasina sebeb olur.
 # Ona gore .env-i HEMISE BASE_DIR-e (manage.py-in yaninda) gore, cwd-den asili olmadan oxuyuruq.
-# _env_path = BASE_DIR / ".env"
-# if not _env_path.exists():
-#     raise RuntimeError(
-#         f".env faylı tapılmadı: {_env_path}\n"
-#         f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda (manage.py ilə eyni yerdə) "
-#         f".env adı ilə saxlayın: cp .env.example .env"
-#     )
-# config = Config(RepositoryEnv(str(_env_path)))
+_env_path = BASE_DIR / ".env"
+if not _env_path.exists():
+    raise RuntimeError(
+        f".env faylı tapılmadı: {_env_path}\n"
+        f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda (manage.py ilə eyni yerdə) "
+        f".env adı ilə saxlayın: cp .env.example .env"
+    )
+config = Config(RepositoryEnv(str(_env_path)))
 
 # --------------------------------------------------------------------------
 # Esas
@@ -90,17 +88,15 @@ WSGI_APPLICATION = "pilauBackend.wsgi.application"
 # DB - production-da Postgres, lokal deveetlopment-de sqlite
 # --------------------------------------------------------------------------
 if DJANGO_ENV == "production":
-    # os.environ.get əvəzinə config() istifadə edirik ki, .env-dən də oxuya bilsin
-    database_url = config('DATABASE_URL', default=None)
-    if not database_url:
-        raise ValueError("DATABASE_URL mühit dəyişəni tapılmadı!")
-
     DATABASES = {
-        'default': dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
-            ssl_require=True
-        )
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST"),
+            "PORT": config("DB_PORT", default="5432"),
+        }
     }
 else:
     DATABASES = {
@@ -109,6 +105,7 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
 # --------------------------------------------------------------------------
 # Sifre siyaseti - Argon2 + guclu validatorlar
 # --------------------------------------------------------------------------

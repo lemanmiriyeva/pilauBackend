@@ -81,12 +81,53 @@ class LoginView(APIView):
         user.reset_failed_login()
         log_security_event("LOGIN_PASSWORD_OK", user=user, ip=ip)
 
-        if not user.totp_confirmed:
-            temp_token = issue_short_lived_token(user, purpose="totp_setup")
-            return Response({"step": "totp_setup_required", "temp_token": temp_token})
+        return Response(_next_login_step_response(user))
 
-        temp_token = issue_short_lived_token(user, purpose="totp_verify")
-        return Response({"step": "totp_required", "temp_token": temp_token})
+
+def _next_login_step_response(user) -> dict:
+    """Şifrə yoxlanışından (və ya ilk giriş şifrə təyinatından) sonra növbəti addımı müəyyən edir:
+    1) İlk giriş - admin tərəfindən yaradılıb, şifrə hələ təyin olunmayıb -> kodsuz şifrə təyinatı.
+    2) 2FA hələ qurulmayıb -> TOTP setup.
+    3) Normal giriş -> TOTP verify.
+    """
+    if user.must_change_password:
+        temp_token = issue_short_lived_token(user, purpose="password_change")
+        return {"step": "password_change_required", "temp_token": temp_token}
+
+    if not user.totp_confirmed:
+        temp_token = issue_short_lived_token(user, purpose="totp_setup")
+        return {"step": "totp_setup_required", "temp_token": temp_token}
+
+    temp_token = issue_short_lived_token(user, purpose="totp_verify")
+    return {"step": "totp_required", "temp_token": temp_token}
+
+
+class FirstLoginPasswordSetView(APIView):
+    """İlk giriş: admin tərəfindən yaradılan istifadəçi doğru müvəqqəti şifrə ilə daxil olduqdan
+    sonra (kodsuz, birbaşa) öz yeni şifrəsini təyin edir. LoginView-də autentifikasiya artıq
+    keçildiyi üçün burada əlavə kod tələb olunmur - yalnız qısa ömürlü temp_token yoxlanılır."""
+    permission_classes = [AllowAny]
+    throttle_scope = "totp_verify"
+
+    def post(self, request):
+        serializer = FirstLoginPasswordSetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = decode_temp_token(serializer.validated_data["temp_token"], expected_purpose="password_change")
+        if not user:
+            return Response({"detail": "Sessiya bitib, yenidən daxil olun."}, status=401)
+
+        user.set_password(serializer.validated_data["new_password"])
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password"])
+
+        log_security_event("FIRST_LOGIN_PASSWORD_SET", user=user, ip=get_client_ip(request))
+        send_mail_to(
+            user.email, "Şifrəniz təyin edildi",
+            "Hesabınız üçün yeni şifrə uğurla təyin edildi.",
+        )
+
+        return Response(_next_login_step_response(user))
 
 
 class TOTPSetupBeginView(APIView):
@@ -308,6 +349,8 @@ class CreateUserView(APIView):
 
         user = User(**data)
         user.set_password(password)
+        # Bütün istifadəçiləri admin yaradır - ilk girişdə kodsuz, birbaşa yeni şifrə təyin etməyə yönləndirilir.
+        user.must_change_password = True
         user.save()
 
         for item in modules_data:
