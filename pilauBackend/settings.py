@@ -90,7 +90,8 @@ WSGI_APPLICATION = "pilauBackend.wsgi.application"
 # DB - production-da Postgres, lokal deveetlopment-de sqlite
 # --------------------------------------------------------------------------
 if DJANGO_ENV == "production":
-    database_url = os.environ.get('DATABASE_URL')
+    # os.environ.get əvəzinə config() istifadə edirik ki, .env-dən də oxuya bilsin
+    database_url = config('DATABASE_URL', default=None)
     if not database_url:
         raise ValueError("DATABASE_URL mühit dəyişəni tapılmadı!")
 
@@ -108,7 +109,6 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-
 # --------------------------------------------------------------------------
 # Sifre siyaseti - Argon2 + guclu validatorlar
 # --------------------------------------------------------------------------
