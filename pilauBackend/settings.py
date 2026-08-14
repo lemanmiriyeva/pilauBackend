@@ -5,6 +5,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import Config, Csv, RepositoryEnv,config
+from tutorial.settings import ALLOWED_HOSTS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,8 +27,8 @@ config = Config(RepositoryEnv(str(_env_path)))
 DJANGO_ENV = config("DJANGO_ENV", default="development")
 DEBUG = config("DEBUG", default=False, cast=bool)
 SECRET_KEY = config("SECRET_KEY")
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
-
+# ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
+ALLOWED_HOSTS=['*']
 AUTH_USER_MODEL = "authentication.User"
 
 INSTALLED_APPS = [

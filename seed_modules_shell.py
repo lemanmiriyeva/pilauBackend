@@ -64,11 +64,11 @@ Module.objects.get_or_create(
 # --- 'Lisenziya' altinda alt-modullar ---
 Module.objects.get_or_create(
     key="istehsal", parent=lisenziya,
-    defaults={"title": "İstehsal (Lisenziya)", "meta": "Müddətsiz", "icon": "gavel", "order": 1},
+    defaults={"title": "İstehsal lisenziyası", "meta": "Müddətsiz", "icon": "gavel", "order": 1},
 )
 Module.objects.get_or_create(
     key="xususi-satis", parent=lisenziya,
-    defaults={"title": "Xüsusi Satış (İcazə sənədi)", "meta": "Müddətsiz", "icon": "local_shipping", "order": 2},
+    defaults={"title": "Xüsusi satış icazə sənədi", "meta": "Müddətsiz", "icon": "local_shipping", "order": 2},
 )
 Module.objects.get_or_create(
     key="idxal-ixrac", parent=lisenziya,

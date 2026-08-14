@@ -16,7 +16,7 @@ def _default_number(doc_type: str) -> str:
 class PermitDocument(models.Model):
     """İdxal / İxrac icazə sənədi (Image 1/2/3/4)."""
 
-    doc_type = models.CharField("Növ", max_length=10, choices=DOC_TYPES)
+    doc_type = models.CharField("Növ", max_length=20, choices=DOC_TYPES)
     number = models.CharField("Sənəd nömrəsi", max_length=30, unique=True, blank=True)
     title = models.CharField("Başlıq", max_length=255, blank=True)
 

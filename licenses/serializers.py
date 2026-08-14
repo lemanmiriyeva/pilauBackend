@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from licenses.field_schema import get_schema
+from licenses.field_schema import DOC_TYPES, get_schema
 from licenses.models import PermitDocument, PermitDocumentFile
 
 
@@ -18,7 +18,7 @@ class PermitDocumentListSerializer(serializers.ModelSerializer):
         model = PermitDocument
         fields = [
             "id", "number", "title", "doc_type", "category",
-            "issue_date", "expiry_date", "status",
+            "applicant_name", "issue_date", "expiry_date", "status",
         ]
 
 
@@ -59,8 +59,11 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         doc_type = attrs.get("doc_type")
-        if doc_type not in ("ixrac", "idxal"):
-            raise serializers.ValidationError({"doc_type": "'ixrac' və ya 'idxal' olmalıdır."})
+        valid_types = dict(DOC_TYPES)
+        if doc_type not in valid_types:
+            raise serializers.ValidationError(
+                {"doc_type": f"{', '.join(repr(k) for k in valid_types)} dəyərlərindən biri olmalıdır."}
+            )
 
         schema = get_schema(doc_type)
         form_data = attrs.get("form_data") or {}

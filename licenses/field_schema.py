@@ -10,6 +10,14 @@ redaktə etmək kifayətdir - frontend formu avtomatik uyğunlaşır.
 DOC_TYPES = (
     ("ixrac", "İxrac"),
     ("idxal", "İdxal"),
+    ("istehsal", "İstehsal"),
+    ("xususi_satis", "Xüsusi Satış"),
+)
+
+# --- 'İstehsal lisenziyası' üçün "Lisenziya anketi"-ndəki 'Lisenziya tipi' sahəsinin seçimləri ---
+LICENSE_TYPE_CHOICES = (
+    ("yeni", "Yeni lisenziya"),
+    ("yeniden_resmilesdirme", "Yenidən rəsmiləşdirmə"),
 )
 
 STATUS_CHOICES = (
@@ -51,7 +59,7 @@ _IDXAL_FILE_FIELDS = [
 ]
 
 # --- "Elektron müraciət forması" (Lisenziya anketi) rejimi üçün sahələr ---
-# Hər iki tip üçün eynidir.
+# İdxal/İxrac üçün eynidir.
 _FORM_FIELDS = [
     {"key": "icaze_nomresi", "label": "İcazə nömrəsi", "type": "text", "required": True, "auto": True},
     {"key": "mehsul", "label": "Malın adı / qismən fəaliyyət növü", "type": "text", "required": True},
@@ -66,11 +74,63 @@ _FORM_FIELDS = [
     {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
 ]
 
+# --- "Fayl yüklə" rejimi - İstehsal lisenziyası (Image 2) ---
+_ISTEHSAL_FILE_FIELDS = [
+    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (imzalanmış)", "required": True, "max_size_mb": 10},
+    {"key": "tesis_senedi", "label": "Təsis sənədi (nizamnamə)", "required": True, "max_size_mb": 10},
+    {"key": "voen_sureti", "label": "VÖEN şəhadətnaməsinin surəti", "required": True, "max_size_mb": 10},
+    {"key": "fealiyyet_senedi", "label": "Müəssisənin fəaliyyəti barədə sənəd", "required": True, "max_size_mb": 10},
+    {"key": "isci_terkibi_senedi", "label": "Müəssisənin işçi tərkibi barədə sənəd (Ərizəyə əlavə)", "required": True, "max_size_mb": 10},
+    {"key": "vesiqe_sureti", "label": "Səlahiyyətli şəxsin şəxsiyyət vəsiqəsinin surəti", "required": True, "max_size_mb": 10},
+]
+
+# --- "Elektron müraciət forması" (Lisenziya anketi) - İstehsal lisenziyası (Image 3) ---
+_ISTEHSAL_FORM_FIELDS = [
+    {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
+    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
+    {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True, "options": LICENSE_TYPE_CHOICES},
+    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "text", "required": True},
+    {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
+    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text", "required": True},
+    {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
+    {"key": "muddet", "label": "Müddət", "type": "text", "required": True},
+    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
+]
+
+# --- "Fayl yüklə" rejimi - Xüsusi satış icazə sənədi (Image 2) ---
+_XUSUSI_SATIS_FILE_FIELDS = [
+    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (möhürlü)", "required": True, "max_size_mb": 10},
+    {"key": "mallarin_siyahisi", "label": "Malların siyahısı / nomenklaturası", "required": True, "max_size_mb": 10},
+    {"key": "istehsal_prosesi_melumati", "label": "Malların istehsal prosesi barədə məlumat", "required": True, "max_size_mb": 10},
+    {"key": "istehsal_idxal_hisseleri_melumati", "label": "Malların istehsal və idxal olunan hissələri barədə məlumat", "required": True, "max_size_mb": 10},
+    {"key": "texniki_gostericiler", "label": "Malların texniki göstəriciləri", "required": True, "max_size_mb": 10},
+    {"key": "texnoloji_konstruksiya_senedleri", "label": "Malların texnoloji konstruksiya sənədləri", "required": True, "max_size_mb": 10},
+    {"key": "beynelxalq_standart_senedi", "label": "Malların beynəlxalq standartlara uyğunluğu barədə sənəd", "required": True, "max_size_mb": 10},
+]
+
+# --- "Elektron müraciət forması" (Lisenziya anketi) - Xüsusi satış icazə sənədi (Image 3) ---
+_XUSUSI_SATIS_FORM_FIELDS = [
+    {"key": "icaze_nomresi", "label": "İcazə nömrəsi", "type": "text", "required": True, "auto": True},
+    {"key": "istinad_maddesi", "label": "İstinad maddəsi", "type": "text", "required": True},
+    {"key": "satis_novu", "label": "Satış növü (Daxili satış / İdxal / İxrac)", "type": "text", "required": True},
+    {"key": "malin_tesviri", "label": "Malın təsviri", "type": "text", "required": True},
+    {"key": "muqavile_nomresi", "label": "Müqavilə nömrəsi", "type": "text", "required": True},
+    {"key": "muddet", "label": "Müddət", "type": "text", "required": True},
+    {"key": "selahiyyetli_organ", "label": "Səlahiyyətli orqan", "type": "text", "required": False, "auto": False},
+]
+
+_SCHEMA_BY_DOC_TYPE = {
+    "ixrac": {"file_fields": _IXRAC_FILE_FIELDS, "form_fields": _FORM_FIELDS},
+    "idxal": {"file_fields": _IDXAL_FILE_FIELDS, "form_fields": _FORM_FIELDS},
+    "istehsal": {"file_fields": _ISTEHSAL_FILE_FIELDS, "form_fields": _ISTEHSAL_FORM_FIELDS},
+    "xususi_satis": {"file_fields": _XUSUSI_SATIS_FILE_FIELDS, "form_fields": _XUSUSI_SATIS_FORM_FIELDS},
+}
+
 
 def get_schema(doc_type: str) -> dict:
-    file_fields = _IXRAC_FILE_FIELDS if doc_type == "ixrac" else _IDXAL_FILE_FIELDS
+    schema = _SCHEMA_BY_DOC_TYPE.get(doc_type, _SCHEMA_BY_DOC_TYPE["idxal"])
     return {
         "doc_type": doc_type,
-        "file_fields": file_fields,
-        "form_fields": _FORM_FIELDS,
+        "file_fields": schema["file_fields"],
+        "form_fields": schema["form_fields"],
     }
