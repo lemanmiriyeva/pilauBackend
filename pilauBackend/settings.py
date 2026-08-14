@@ -90,9 +90,13 @@ WSGI_APPLICATION = "pilauBackend.wsgi.application"
 # DB - production-da Postgres, lokal deveetlopment-de sqlite
 # --------------------------------------------------------------------------
 if DJANGO_ENV == "production":
+    database_url = os.environ.get('DATABASE_URL')
+    if not database_url:
+        raise ValueError("DATABASE_URL mühit dəyişəni tapılmadı!")
+
     DATABASES = {
         'default': dj_database_url.config(
-            default=os.environ.get('DATABASE_URL'),
+            default=database_url,
             conn_max_age=600,
             ssl_require=True
         )
