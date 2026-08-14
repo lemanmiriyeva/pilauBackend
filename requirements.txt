@@ -38,6 +38,7 @@ defusedxml==0.7.1
 dill==0.3.8
 distlib==0.3.9
 dj-database-url==3.1.2
+psycopg2-binary
 Django==5.0
 django-admin==2.0.2
 django-background-tasks==1.2.8
