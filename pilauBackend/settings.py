@@ -12,14 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # python-decouple-in defolt config() funksiyasi .env-i CWD-den (serveri hardan ise
 # saldiginizdan) axtarir - bu, IDE/terminal-dan asili olaraq tapilmamasina sebeb olur.
 # Ona gore .env-i HEMISE BASE_DIR-e (manage.py-in yaninda) gore, cwd-den asili olmadan oxuyuruq.
-_env_path = BASE_DIR / ".env"
-if not _env_path.exists():
-    raise RuntimeError(
-        f".env faylı tapılmadı: {_env_path}\n"
-        f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda (manage.py ilə eyni yerdə) "
-        f".env adı ilə saxlayın: cp .env.example .env"
-    )
-config = Config(RepositoryEnv(str(_env_path)))
+# _env_path = BASE_DIR / ".env"
+# if not _env_path.exists():
+#     raise RuntimeError(
+#         f".env faylı tapılmadı: {_env_path}\n"
+#         f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda (manage.py ilə eyni yerdə) "
+#         f".env adı ilə saxlayın: cp .env.example .env"
+#     )
+# config = Config(RepositoryEnv(str(_env_path)))
 
 # --------------------------------------------------------------------------
 # Esas
