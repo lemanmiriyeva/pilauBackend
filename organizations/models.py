@@ -19,6 +19,8 @@ class Organization(models.Model):
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children"
     )
 
+    is_active = models.BooleanField("Aktiv", default=True)
+
     # --- Əlavə məlumatlar ---
     notes = models.TextField("Əlavə məlumatlar", blank=True)
 

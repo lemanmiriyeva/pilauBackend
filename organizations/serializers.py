@@ -28,7 +28,16 @@ class OrganizationSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ["id", "full_name", "voen", "parent", "user_count"]
+        fields = ["id", "full_name", "voen", "parent", "user_count", "is_active"]
+
+
+class OrganizationTableSerializer(serializers.ModelSerializer):
+    """Təşkilatlar siyahısı (list) üçün - səlahiyyətli şəxs sayı ilə birlikdə."""
+    authorized_person_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Organization
+        fields = ["id", "full_name", "voen", "is_active", "authorized_person_count", "created_at"]
 
 
 class OrganizationDetailSerializer(serializers.ModelSerializer):
@@ -39,7 +48,7 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "full_name", "voen", "state_reg_number",
             "email", "phone", "address",
-            "parent", "notes", "authorized_persons",
+            "parent", "notes", "authorized_persons", "is_active",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
@@ -50,3 +59,15 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
         for person_data in persons_data:
             AuthorizedPerson.objects.create(organization=organization, **person_data)
         return organization
+
+    def update(self, instance, validated_data):
+        persons_data = validated_data.pop("authorized_persons", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if persons_data is not None:
+            instance.authorized_persons.all().delete()
+            for person_data in persons_data:
+                AuthorizedPerson.objects.create(organization=instance, **person_data)
+        return instance

@@ -23,6 +23,7 @@ class PermitDocument(models.Model):
     submission_mode = models.CharField(
         "Müraciət üsulu", max_length=10, choices=SUBMISSION_MODES, default="file"
     )
+    is_confidential = models.BooleanField("Məxfi lisenziya", default=False)
     form_data = models.JSONField("Elektron müraciət forması cavabları", default=dict, blank=True)
 
     # --- Müraciətçi məlumatları (snapshot - Organization/AuthorizedPerson-dan götürülür) ---

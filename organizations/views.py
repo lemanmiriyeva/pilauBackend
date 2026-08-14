@@ -6,6 +6,7 @@ from .serializers import (
     OrganizationDetailSerializer,
     OrganizationListSerializer,
     OrganizationSummarySerializer,
+    OrganizationTableSerializer,
 )
 
 
@@ -28,6 +29,21 @@ class OrganizationTreeView(generics.ListAPIView):
 
     def get_queryset(self):
         return Organization.objects.filter(parent__isnull=True).prefetch_related("children")
+
+
+class OrganizationTableListView(generics.ListAPIView):
+    """Təşkilatlar siyahı səhifəsi (list) - səlahiyyətli şəxs sayı ilə birlikdə."""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrganizationTableSerializer
+
+    def get_queryset(self):
+        qs = Organization.objects.annotate(
+            authorized_person_count=Count("authorized_persons", distinct=True)
+        ).order_by("full_name")
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(full_name__icontains=search)
+        return qs
 
 
 class OrganizationListCreateView(generics.ListCreateAPIView):

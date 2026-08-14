@@ -31,7 +31,7 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
         model = PermitDocument
         fields = [
             "id", "doc_type", "category", "number", "title",
-            "submission_mode", "form_data", "files",
+            "submission_mode", "is_confidential", "form_data", "files",
             "organization", "authorized_person",
             "applicant_name", "voen", "fin_kod", "department", "position", "phone", "email",
             "issue_date", "expiry_date", "status",
@@ -49,7 +49,7 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PermitDocument
         fields = [
-            "id", "doc_type", "title", "submission_mode", "form_data",
+            "id", "doc_type", "title", "submission_mode", "is_confidential", "form_data",
             "organization", "authorized_person",
             "applicant_name", "voen", "fin_kod", "department", "position", "phone", "email",
             "issue_date", "expiry_date", "status",
@@ -62,16 +62,14 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
         if doc_type not in ("ixrac", "idxal"):
             raise serializers.ValidationError({"doc_type": "'ixrac' və ya 'idxal' olmalıdır."})
 
-        submission_mode = attrs.get("submission_mode", "file")
-        if submission_mode == "form":
-            schema = get_schema(doc_type)
-            form_data = attrs.get("form_data") or {}
-            missing = [
-                f["label"] for f in schema["form_fields"]
-                if f.get("required") and not f.get("auto") and not str(form_data.get(f["key"], "")).strip()
-            ]
-            if missing:
-                raise serializers.ValidationError({"form_data": f"Bu sahələr tələb olunur: {', '.join(missing)}"})
+        schema = get_schema(doc_type)
+        form_data = attrs.get("form_data") or {}
+        missing = [
+            f["label"] for f in schema["form_fields"]
+            if f.get("required") and not f.get("auto") and not str(form_data.get(f["key"], "")).strip()
+        ]
+        if missing:
+            raise serializers.ValidationError({"form_data": f"Bu sahələr tələb olunur: {', '.join(missing)}"})
         return attrs
 
     def create(self, validated_data):

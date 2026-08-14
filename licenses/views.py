@@ -85,20 +85,34 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        is_confidential = str(request.data.get("is_confidential", "")).lower() in ("true", "1", "yes")
+        doc_type = serializer.validated_data.get("doc_type")
+        schema = get_schema(doc_type)
+        labels_by_key = {f["key"]: f["label"] for f in schema["file_fields"]}
+
+        if not is_confidential:
+            missing_files = [
+                f["label"] for f in schema["file_fields"]
+                if f.get("required") and f"{FILE_FIELD_PREFIX}{f['key']}" not in request.FILES
+            ]
+            if missing_files:
+                return Response(
+                    {"detail": f"Bu sənədlər tələb olunur: {', '.join(missing_files)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         document = serializer.save()
 
-        if document.submission_mode == "file":
-            schema = get_schema(document.doc_type)
-            labels_by_key = {f["key"]: f["label"] for f in schema["file_fields"]}
-            for key, uploaded_file in request.FILES.items():
-                if not key.startswith(FILE_FIELD_PREFIX):
-                    continue
-                field_key = key[len(FILE_FIELD_PREFIX):]
-                PermitDocumentFile.objects.create(
-                    document=document, field_key=field_key,
-                    field_label=labels_by_key.get(field_key, field_key),
-                    file=uploaded_file, original_name=uploaded_file.name,
-                )
+        for key, uploaded_file in request.FILES.items():
+            if not key.startswith(FILE_FIELD_PREFIX):
+                continue
+            field_key = key[len(FILE_FIELD_PREFIX):]
+            PermitDocumentFile.objects.create(
+                document=document, field_key=field_key,
+                field_label=labels_by_key.get(field_key, field_key),
+                file=uploaded_file, original_name=uploaded_file.name,
+            )
 
         out = PermitDocumentDetailSerializer(document, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
