@@ -39,17 +39,19 @@ class ApplicantInfoView(APIView):
         if not org:
             return Response({"organization": None, "authorized_persons": []})
 
+        # Meta.ordering ("person_type", "full_name") "əsas" şəxsi siyahının başına gətirir.
         persons = AuthorizedPerson.objects.filter(organization=org)
         return Response({
             "organization": {
                 "id": org.id,
                 "full_name": org.full_name,
                 "voen": org.voen,
+                "code": org.code,
             },
             "authorized_persons": [
                 {
-                    "id": p.id, "full_name": p.full_name, "fin_kod": p.fin_kod,
-                    "department": p.department, "position": p.position,
+                    "id": p.id, "person_type": p.person_type, "full_name": p.full_name,
+                    "fin_kod": p.fin_kod, "department": p.department, "position": p.position,
                     "email": p.email, "phone": p.phone,
                 } for p in persons
             ],

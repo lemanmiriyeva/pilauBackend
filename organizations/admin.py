@@ -10,7 +10,7 @@ class AuthorizedPersonInline(admin.TabularInline):
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("full_name", "voen", "parent", "phone", "email")
+    list_display = ("full_name", "code", "voen", "parent", "phone", "email")
     search_fields = ("full_name", "voen", "state_reg_number")
-    list_filter = ("parent",)
+    list_filter = ("code", "parent")
     inlines = [AuthorizedPersonInline]

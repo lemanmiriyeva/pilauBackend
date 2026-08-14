@@ -6,7 +6,10 @@ from .models import AuthorizedPerson, Organization
 class AuthorizedPersonSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuthorizedPerson
-        fields = ["id", "organization", "full_name", "fin_kod", "department", "position", "email", "phone"]
+        fields = [
+            "id", "organization", "person_type", "full_name",
+            "fin_kod", "department", "position", "email", "phone",
+        ]
         extra_kwargs = {"organization": {"required": False}}
 
 
@@ -16,7 +19,7 @@ class OrganizationListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ["id", "full_name", "children"]
+        fields = ["id", "full_name", "code", "children"]
 
     def get_children(self, obj):
         return OrganizationListSerializer(obj.children.all(), many=True).data
@@ -28,7 +31,7 @@ class OrganizationSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ["id", "full_name", "voen", "parent", "user_count", "is_active"]
+        fields = ["id", "full_name", "code", "voen", "parent", "user_count", "is_active"]
 
 
 class OrganizationTableSerializer(serializers.ModelSerializer):
@@ -37,7 +40,7 @@ class OrganizationTableSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ["id", "full_name", "voen", "is_active", "authorized_person_count", "created_at"]
+        fields = ["id", "full_name", "code", "voen", "is_active", "authorized_person_count", "created_at"]
 
 
 class OrganizationDetailSerializer(serializers.ModelSerializer):
@@ -46,7 +49,7 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = [
-            "id", "full_name", "voen", "state_reg_number",
+            "id", "code", "full_name", "voen", "state_reg_number",
             "email", "phone", "address",
             "parent", "notes", "authorized_persons", "is_active",
             "created_at", "updated_at",

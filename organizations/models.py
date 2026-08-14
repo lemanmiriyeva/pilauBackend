@@ -4,6 +4,19 @@ from django.db import models
 class Organization(models.Model):
     """Image 3 - 'Təşkilat yarat' formuna uyğun. parent ilə iyerarxiya (AzərSilah, Miras Holding və s. altı)."""
 
+    CODE_MSN = "msn"
+    CODE_OTHER = "other"
+    CODE_CHOICES = [
+        (CODE_MSN, "Müdafiə Sənayesi Nazirliyi"),
+        (CODE_OTHER, "Digər"),
+    ]
+
+    # Təşkilatın növünü ayırmaq üçün (MSN - nazirliyin özü, digər - bütün digər hüquqi şəxslər).
+    # İdxal/ixrac icazə sənədi formasında müraciətçi məlumatlarının redaktə oluna bilməsi
+    # bu koda görə müəyyən olunur: MSN istifadəçiləri üçün hər şey editable, digərləri üçün
+    # yalnız səlahiyyətli şəxs seçimi mümkündür.
+    code = models.CharField("Kod", max_length=20, choices=CODE_CHOICES, default=CODE_OTHER)
+
     # --- İdentifikasiya (Eyniləşdirmə) ---
     full_name = models.CharField("Tam adı", max_length=255)
     voen = models.CharField("VÖEN", max_length=20, unique=True)
@@ -46,7 +59,15 @@ class Organization(models.Model):
 class AuthorizedPerson(models.Model):
     """Image 3 - 'Səlahiyyətli şəxs' bölməsi. Bir təşkilatın bir neçə səlahiyyətli şəxsi ola bilər (+ düyməsi)."""
 
+    TYPE_MAIN = "main"
+    TYPE_OTHER = "other"
+    TYPE_CHOICES = [
+        (TYPE_MAIN, "Əsas"),
+        (TYPE_OTHER, "Digər"),
+    ]
+
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="authorized_persons")
+    person_type = models.CharField("Növ", max_length=10, choices=TYPE_CHOICES, default=TYPE_MAIN)
     full_name = models.CharField("Tam adı", max_length=255)
     fin_kod = models.CharField("FİN kod", max_length=10, blank=True)
     department = models.CharField("Departament/Şöbə", max_length=255, blank=True)
@@ -57,6 +78,7 @@ class AuthorizedPerson(models.Model):
     class Meta:
         verbose_name = "Səlahiyyətli şəxs"
         verbose_name_plural = "Səlahiyyətli şəxslər"
+        ordering = ["person_type", "full_name"]  # "main" (əsas) əlifba sırası ilə "other"dan (digər) əvvəl gəlir
 
     def __str__(self):
         return f"{self.full_name} ({self.organization.full_name})"
