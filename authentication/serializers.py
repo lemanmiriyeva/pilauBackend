@@ -20,11 +20,13 @@ class TOTPSetupConfirmSerializer(serializers.Serializer):
 
 
 class ForgotPasswordRequestSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    """İstifadəçi adı VƏ YA e-poçt ünvanı ilə şifrə bərpa kodu tələb etmək üçün."""
+    identifier = serializers.CharField()
 
 
 class ForgotPasswordConfirmSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    """identifier - əvvəlki addımda göndərilən eyni istifadəçi adı/e-poçt."""
+    identifier = serializers.CharField()
     code = serializers.CharField(max_length=6)
     new_password = serializers.CharField(trim_whitespace=False)
 

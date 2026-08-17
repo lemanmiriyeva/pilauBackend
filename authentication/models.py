@@ -31,6 +31,10 @@ class User(AbstractUser):
     # authentication/views.py (UserListView, UserAdminDetailView).
     is_org_admin = models.BooleanField("Qurum admini", default=False)
 
+    # --- İlk giriş - admin tərəfindən yaradılan hər istifadəçi ilk dəfə daxil olduqda
+    # şifrəni özü təyin etməlidir (kodsuz, birbaşa) ---
+    must_change_password = models.BooleanField("Şifrəni dəyişməlidir (ilk giriş)", default=False)
+
     # --- Lockout ---
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     is_locked = models.BooleanField(default=False)

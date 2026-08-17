@@ -15,9 +15,11 @@ from .serializers import (
     AdminResetTOTPSerializer,
     ChangePasswordSerializer,
     CreateUserSerializer,
+    FirstLoginPasswordSetSerializer,
     ForgotPasswordConfirmSerializer,
     ForgotPasswordRequestSerializer,
     LoginSerializer,
+    SelfProfileUpdateSerializer,
     TOTPSetupConfirmSerializer,
     TOTPVerifySerializer,
     UnlockUserSerializer,
@@ -224,7 +226,7 @@ class LogoutView(APIView):
 
 class ForgotPasswordRequestView(APIView):
     """
-    1-ci addim: yalniz username. Tapilarsa qeydiyyatdaki e-poctuna kod gonderilir.
+    1-ci addim: istifadəçi adı VƏ YA e-poçt. Tapilarsa qeydiyyatdaki e-poctuna kod gonderilir.
     Hech bir halda (istifadeci yoxdur / bloklanib / basqa xeta) fergli cavab qaytarilmir -
     ancaq bloklanmis hesaba kod gonderilmir (lockout bypass qarsisi).
     """
@@ -234,10 +236,12 @@ class ForgotPasswordRequestView(APIView):
     def post(self, request):
         serializer = ForgotPasswordRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        username = serializer.validated_data["username"]
+        identifier = serializer.validated_data["identifier"]
         ip = get_client_ip(request)
 
-        user = User.objects.filter(username=username, is_active=True).first()
+        user = User.objects.filter(
+            Q(username=identifier) | Q(email__iexact=identifier), is_active=True
+        ).first()
         if user and not user.is_locked:
             code = generate_numeric_code(6)
             PasswordResetCode.objects.create(
@@ -257,13 +261,13 @@ class ForgotPasswordRequestView(APIView):
             )
             log_security_event("PASSWORD_RESET_REQUESTED", user=user, ip=ip)
         else:
-            log_security_event("PASSWORD_RESET_REQUESTED_INVALID", ip=ip, extra=f"username={username}")
+            log_security_event("PASSWORD_RESET_REQUESTED_INVALID", ip=ip, extra=f"identifier={identifier}")
 
         return Response(GENERIC_FORGOT_PASSWORD_RESPONSE)
 
 
 class ForgotPasswordConfirmView(APIView):
-    """2-ci addim: username + email-e gelen kod + yeni sifre."""
+    """2-ci addim: istifadəçi adı/e-poçt + e-poçta gələn kod + yeni şifrə."""
     permission_classes = [AllowAny]
     throttle_scope = "forgot_password"
 
@@ -273,7 +277,9 @@ class ForgotPasswordConfirmView(APIView):
         data = serializer.validated_data
         ip = get_client_ip(request)
 
-        user = User.objects.filter(username=data["username"]).first()
+        user = User.objects.filter(
+            Q(username=data["identifier"]) | Q(email__iexact=data["identifier"])
+        ).first()
         if not user:
             return Response({"detail": "Kod yanlış və ya vaxtı bitib."}, status=400)
 
@@ -319,9 +325,17 @@ class ChangePasswordView(APIView):
 
 
 class MeView(APIView):
+    """Şəxsi kabinet (Image 4). GET - öz məlumatları, PATCH - öz məlumatlarını redaktə et."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = SelfProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_security_event("PROFILE_SELF_UPDATE", user=request.user, ip=get_client_ip(request))
         return Response(UserSerializer(request.user).data)
 
 
