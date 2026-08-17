@@ -40,7 +40,7 @@ from .utils import (
 
 GENERIC_LOGIN_ERROR = {"detail": "İstifadəçi adı və ya şifrə yanlışdır."}
 GENERIC_FORGOT_PASSWORD_RESPONSE = {
-    "detail": "Əgər bu istifadəçi adı mövcuddursa, qeydiyyatdan keçmiş e-poçt ünvanına kod göndərildi."
+    "detail": "Əgər bu istifadəçi adı və ya elektron poçt ünvanı mövcuddursa, qeydiyyatdan keçmiş elektron poçt ünvanına kod göndərildi."
 }
 
 
@@ -89,15 +89,14 @@ class LoginView(APIView):
 
 
 def _next_login_step_response(user) -> dict:
-    """Şifrə yoxlanışından (və ya ilk giriş şifrə təyinatından) sonra növbəti addımı müəyyən edir:
-    1) İlk giriş - admin tərəfindən yaradılıb, şifrə hələ təyin olunmayıb -> kodsuz şifrə təyinatı.
-    2) 2FA hələ qurulmayıb -> TOTP setup.
-    3) Normal giriş -> TOTP verify.
-    """
-    if user.must_change_password:
-        temp_token = issue_short_lived_token(user, purpose="password_change")
-        return {"step": "password_change_required", "temp_token": temp_token}
+    """Şifrə yoxlanışından sonra növbəti addımı müəyyən edir.
 
+    QEYD: 'must_change_password' YALNIZ istifadəçi admin tərəfindən yaradılarkən (CreateUserView)
+    True olur - və yaradılan istifadəçinin 2FA-sı da hələ qurulmayıb olur. Ona görə şifrə təyini
+    addımı BURADA yoxlanılmır: axın həmişə əvvəlcə 2FA qurulmasına yönləndirir, şifrə təyini isə
+    2FA təsdiqləndikdən SONRA soruşulur (bax TOTPSetupConfirmView) - beləliklə admin tərəfindən
+    verilmiş müvəqqəti şifrə ilə daxil olan istifadəçi əvvəlcə 2FA-nı təsdiqləyir, sonra öz yeni
+    şifrəsini təyin edir."""
     if not user.totp_confirmed:
         temp_token = issue_short_lived_token(user, purpose="totp_setup")
         return {"step": "totp_setup_required", "temp_token": temp_token}
@@ -107,9 +106,11 @@ def _next_login_step_response(user) -> dict:
 
 
 class FirstLoginPasswordSetView(APIView):
-    """İlk giriş: admin tərəfindən yaradılan istifadəçi doğru müvəqqəti şifrə ilə daxil olduqdan
-    sonra (kodsuz, birbaşa) öz yeni şifrəsini təyin edir. LoginView-də autentifikasiya artıq
-    keçildiyi üçün burada əlavə kod tələb olunmur - yalnız qısa ömürlü temp_token yoxlanılır."""
+    """İlk giriş: admin tərəfindən yaradılan istifadəçi 2FA-nı qurub təsdiqlədikdən SONRA
+    (bax TOTPSetupConfirmView) öz yeni şifrəsini təyin edir. Bu nöqtəyə çatan istifadəçinin 2FA-sı
+    artıq bu sessiyada təsdiqləndiyi üçün (temp_token purpose='password_change' yalnız
+    TOTPSetupConfirmView tərəfindən verilir) - şifrə təyinatından sonra birbaşa tam giriş
+    (access/refresh) verilir, yenidən 2FA soruşulmur."""
     permission_classes = [AllowAny]
     throttle_scope = "totp_verify"
 
@@ -131,7 +132,13 @@ class FirstLoginPasswordSetView(APIView):
             "Hesabınız üçün yeni şifrə uğurla təyin edildi.",
         )
 
-        return Response(_next_login_step_response(user))
+        access, refresh = issue_jwt_pair(user)
+        return Response({
+            "step": "done",
+            "access": access,
+            "refresh": refresh,
+            "user": UserSerializer(user).data,
+        })
 
 
 class TOTPSetupBeginView(APIView):
@@ -171,17 +178,26 @@ class TOTPSetupConfirmView(APIView):
             return Response({"detail": "Kod yanlışdır."}, status=400)
 
         user.totp_confirmed = True
-        backup_codes_plain = [secrets_token() for _ in range(8)]
-        user.totp_backup_codes = [hash_code(c) for c in backup_codes_plain]
-        user.save(update_fields=["totp_confirmed", "totp_backup_codes"])
+        user.save(update_fields=["totp_confirmed"])
 
         log_security_event("TOTP_SETUP_COMPLETE", user=user, ip=get_client_ip(request))
 
+        # İlk giriş: admin tərəfindən yaradılan istifadəçi 2FA-nı təsdiqlədi - indi öz yeni
+        # şifrəsini təyin etməlidir (bax FirstLoginPasswordSetView). Adətən bu vəziyyət yalnız
+        # yeni yaradılmış istifadəçilərdə olur (must_change_password admin tərəfindən sıfırlanmış
+        # 2FA-dan sonra deyil, yalnız yaradılışda True olur).
+        if user.must_change_password:
+            temp_token = issue_short_lived_token(user, purpose="password_change")
+            return Response({
+                "step": "password_change_required",
+                "temp_token": temp_token,
+            })
+
         access, refresh = issue_jwt_pair(user)
         return Response({
+            "step": "done",
             "access": access,
             "refresh": refresh,
-            "backup_codes": backup_codes_plain,  # YALNIZ BURDA gosterilir, saxlanmir
             "user": UserSerializer(user).data,
         })
 
@@ -202,7 +218,7 @@ class TOTPVerifyView(APIView):
         code = serializer.validated_data["code"]
         ip = get_client_ip(request)
 
-        if not (user.verify_totp(code) or user.consume_backup_code(code)):
+        if not user.verify_totp(code):
             log_security_event("TOTP_VERIFY_FAILED", user=user, ip=ip)
             return Response({"detail": "Kod yanlışdır."}, status=401)
 

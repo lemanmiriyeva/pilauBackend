@@ -30,14 +30,14 @@ class UserAdmin(DjangoUserAdmin):
                      "organization", "is_locked", "totp_confirmed", "is_active")
     list_filter = ("is_locked", "totp_confirmed", "is_active", "organization")
     search_fields = ("username", "email", "first_name", "last_name", "fin_kod")
-    readonly_fields = ("totp_secret_encrypted", "totp_backup_codes", "failed_login_attempts", "locked_at")
+    readonly_fields = ("totp_secret_encrypted", "failed_login_attempts", "locked_at")
     inlines = [UserModulePermissionInline]
 
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("Əlavə məlumat", {"fields": ("phone", "fin_kod", "id_card_serial", "organization")}),
         ("Təhlükəsizlik", {"fields": (
             "failed_login_attempts", "is_locked", "locked_at",
-            "totp_confirmed", "totp_secret_encrypted", "totp_backup_codes",
+            "totp_confirmed", "totp_secret_encrypted",
         )}),
     )
 

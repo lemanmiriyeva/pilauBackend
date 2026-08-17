@@ -1,5 +1,3 @@
-import hashlib
-
 import pyotp
 from cryptography.fernet import Fernet
 from django.conf import settings
@@ -43,7 +41,6 @@ class User(AbstractUser):
     # --- 2FA (TOTP - Google Authenticator uyumlu) ---
     totp_secret_encrypted = models.BinaryField(null=True, blank=True)
     totp_confirmed = models.BooleanField(default=False)
-    totp_backup_codes = models.JSONField(default=list, blank=True)
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]
@@ -68,16 +65,6 @@ class User(AbstractUser):
         totp = pyotp.TOTP(self.get_totp_secret())
         return totp.verify(code, valid_window=1)
 
-    def consume_backup_code(self, code: str) -> bool:
-        if not code or not self.totp_backup_codes:
-            return False
-        code_hash = hashlib.sha256(code.strip().encode()).hexdigest()
-        if code_hash in self.totp_backup_codes:
-            self.totp_backup_codes = [c for c in self.totp_backup_codes if c != code_hash]
-            self.save(update_fields=["totp_backup_codes"])
-            return True
-        return False
-
     def register_failed_login(self) -> None:
         self.failed_login_attempts += 1
         if self.failed_login_attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS:
@@ -94,8 +81,7 @@ class User(AbstractUser):
     def reset_totp(self) -> None:
         self.totp_secret_encrypted = None
         self.totp_confirmed = False
-        self.totp_backup_codes = []
-        self.save(update_fields=["totp_secret_encrypted", "totp_confirmed", "totp_backup_codes"])
+        self.save(update_fields=["totp_secret_encrypted", "totp_confirmed"])
 
 
 class PasswordResetCode(models.Model):
