@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 import pyotp
 
+from organizations.permissions import IsStaffOrOrgAdmin, is_full_admin, scoped_organization_ids
+
 from .models import PasswordResetCode, User
 from .serializers import (
     AdminResetTOTPSerializer,
@@ -389,12 +391,18 @@ class CreateUserView(APIView):
 
 
 class UserListView(generics.ListAPIView):
-    """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2)."""
-    permission_classes = [IsAdminUser]
+    """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2).
+
+    Staff/superuser bütün istifadəçiləri görür. Qurum admini (is_org_admin=True) yalnız öz
+    təşkilatı (+ alt-təşkilatları) daxilindəki istifadəçiləri görür."""
+    permission_classes = [IsStaffOrOrgAdmin]
     serializer_class = UserListSerializer
 
     def get_queryset(self):
         qs = User.objects.select_related("organization").order_by("first_name", "last_name", "username")
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
         organization_id = self.request.query_params.get("organization")
         search = self.request.query_params.get("search")
         if organization_id:
@@ -408,9 +416,19 @@ class UserListView(generics.ListAPIView):
 
 
 class UserAdminDetailView(generics.RetrieveUpdateAPIView):
-    """İnzibatçı Paneli -> İstifadəçi redaktəsi və status (Aktiv/Deaktiv) dəyişimi (Image 2)."""
-    permission_classes = [IsAdminUser]
-    queryset = User.objects.select_related("organization")
+    """İnzibatçı Paneli -> İstifadəçi redaktəsi və status (Aktiv/Deaktiv) dəyişimi (Image 2).
+
+    Qurum admini yalnız öz təşkilatındakı (+ alt-təşkilatlar) istifadəçilərə çata bilir (əhatədən
+    kənar id üçün 404 qayıdır) və onları redaktə edə bilir, lakin 'organization' və 'is_org_admin'
+    sahələrini dəyişə bilmir - bunları yalnız staff/superuser dəyişə bilər (aşağıdakı perform_update)."""
+    permission_classes = [IsStaffOrOrgAdmin]
+
+    def get_queryset(self):
+        qs = User.objects.select_related("organization")
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
+        return qs
 
     def get_serializer_class(self):
         if self.request.method in ("PATCH", "PUT"):
@@ -418,6 +436,9 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
         return UserListSerializer
 
     def perform_update(self, serializer):
+        if not is_full_admin(self.request.user):
+            serializer.validated_data.pop("organization", None)
+            serializer.validated_data.pop("is_org_admin", None)
         user = serializer.save()
         log_security_event(
             "ADMIN_USER_UPDATED", user=self.request.user, ip=get_client_ip(self.request),

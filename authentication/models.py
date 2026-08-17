@@ -16,10 +16,20 @@ class User(AbstractUser):
     phone = models.CharField("Telefon", max_length=20, blank=True)
     fin_kod = models.CharField("FIN kod", max_length=10, blank=True)
     id_card_serial = models.CharField("Şəxsiyyət vəsiqəsinin seriya nömrəsi", max_length=20, blank=True)
+    # QEYD: bu iki sahə serializers.py-də (UserSerializer, SelfProfileUpdateSerializer və s.)
+    # artıq istifadə olunurdu, amma modeldə yox idi - bu, /api/auth/me/ və bir çox istifadəçi
+    # endpoint-ini "field department is not defined on model" xətası ilə sındırırdı. Bərpa edildi.
+    department = models.CharField("Departament/Şöbə", max_length=255, blank=True)
+    position = models.CharField("Vəzifə", max_length=255, blank=True)
     organization = models.ForeignKey(
         "organizations.Organization", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="users",
     )
+    # Qurum admini: is_staff (MSN inzibatçısı) olmadan, yalnız öz təşkilatı (+ alt-təşkilatları)
+    # daxilində - Lisenziya/icazə sənədləri, Təşkilatlar və İstifadəçilər modullarında - tam
+    # görünürlük və redaktə icazəsi verir. Bax: organizations/permissions.py, licenses/views.py,
+    # authentication/views.py (UserListView, UserAdminDetailView).
+    is_org_admin = models.BooleanField("Qurum admini", default=False)
 
     # --- Lockout ---
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)

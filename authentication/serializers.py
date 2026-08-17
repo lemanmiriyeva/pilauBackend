@@ -54,7 +54,8 @@ class FirstLoginPasswordSetSerializer(serializers.Serializer):
 
 class SelfProfileUpdateSerializer(serializers.ModelSerializer):
     """Şəxsi kabinet - istifadəçinin öz məlumatlarını redaktə etməsi üçün (Image 4).
-    Təşkilat, istifadəçi adı və status kimi sahələr buradan dəyişilmir."""
+    Təşkilat, istifadəçi adı, FİN kod və status kimi sahələr buradan dəyişilmir
+    (FİN kod sistem tərəfindən verilən identifikatordur, UI-da disabled göstərilir)."""
 
     class Meta:
         model = User
@@ -62,9 +63,10 @@ class SelfProfileUpdateSerializer(serializers.ModelSerializer):
             "first_name", "last_name", "phone", "email",
             "fin_kod", "id_card_serial", "department", "position",
         ]
+        read_only_fields = ["fin_kod"]
         extra_kwargs = {field: {"required": False} for field in [
             "first_name", "last_name", "phone", "email",
-            "fin_kod", "id_card_serial", "department", "position",
+            "id_card_serial", "department", "position",
         ]}
 
 
@@ -83,10 +85,10 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "first_name", "last_name", "username", "email", "phone",
             "organization", "organization_detail", "fin_kod", "id_card_serial",
-            "department", "position",
+            "department", "position", "is_org_admin",
             "is_active", "is_locked", "totp_confirmed", "date_joined",
         ]
-        read_only_fields = ["id", "is_locked", "totp_confirmed", "date_joined"]
+        read_only_fields = ["id", "is_org_admin", "is_locked", "totp_confirmed", "date_joined"]
 
 
 class UserListSerializer(serializers.ModelSerializer):
@@ -98,7 +100,7 @@ class UserListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "full_name", "first_name", "last_name", "username", "email", "phone",
-            "organization", "organization_name", "fin_kod", "id_card_serial",
+            "organization", "organization_name", "fin_kod", "id_card_serial", "is_org_admin",
             "is_active", "is_locked", "date_joined",
         ]
 
@@ -121,7 +123,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "first_name", "last_name", "username", "email", "phone",
-            "organization", "fin_kod", "id_card_serial", "password", "modules",
+            "organization", "fin_kod", "id_card_serial", "is_org_admin", "password", "modules",
         ]
 
     def validate_password(self, value):
@@ -131,17 +133,23 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
 
 class UserAdminUpdateSerializer(serializers.ModelSerializer):
-    """İnzibatçı Paneli -> İstifadəçi redaktəsi üçün (Image 2 'Redaktə' / status dəyişimi)."""
+    """İnzibatçı Paneli -> İstifadəçi redaktəsi üçün (Image 2 'Redaktə' / status dəyişimi).
+
+    QEYD: 'organization' və 'is_org_admin' sahələri buradadır, lakin UserAdminDetailView
+    yalnız is_staff/is_superuser olan sorğuçular üçün onların dəyişilməsinə icazə verir - qurum
+    admini (is_org_admin=True, is_staff=False) öz təşkilatındakı istifadəçiləri redaktə edə bilər,
+    amma onları başqa təşkilata köçürə və ya özünə/başqasına 'qurum admini' statusu verə bilməz
+    (bax: authentication/views.py -> UserAdminDetailView.perform_update)."""
 
     class Meta:
         model = User
         fields = [
             "first_name", "last_name", "email", "phone", "organization",
-            "fin_kod", "id_card_serial", "is_active",
+            "fin_kod", "id_card_serial", "is_org_admin", "is_active",
         ]
         extra_kwargs = {field: {"required": False} for field in [
             "first_name", "last_name", "email", "phone", "organization",
-            "fin_kod", "id_card_serial", "is_active",
+            "fin_kod", "id_card_serial", "is_org_admin", "is_active",
         ]}
 
 

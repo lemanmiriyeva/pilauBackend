@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from organizations.models import AuthorizedPerson
+from organizations.permissions import scoped_organization_ids
 
 from licenses.field_schema import DOC_TYPES, get_schema
 from licenses.models import PermitDocument, PermitDocumentFile
@@ -73,6 +74,14 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+
+        # Təhlükəsizlik: staff/superuser hər şeyi görür, digərləri yalnız öz təşkilatının
+        # (+ alt-təşkilatlarının) sənədlərini. Əvvəllər bu filtr ümumiyyətlə yox idi - istənilən
+        # authenticated istifadəçi bütün təşkilatların sənədlərini görə bilirdi.
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
+
         doc_type = self.request.query_params.get("doc_type")
         status_param = self.request.query_params.get("status")
         search = self.request.query_params.get("search")
