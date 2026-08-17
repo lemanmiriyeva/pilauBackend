@@ -26,22 +26,28 @@ class UserModulePermissionInline(admin.TabularInline):
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
+    # list_display-ə must_change_password əlavə edirik ki, siyahıda görə biləsiniz
     list_display = ("username", "email", "first_name", "last_name",
-                     "organization", "is_locked", "totp_confirmed", "is_active")
-    list_filter = ("is_locked", "totp_confirmed", "is_active", "organization")
+                    "organization", "is_locked", "totp_confirmed", "must_change_password", "is_active")
+
+    # list_filter-ə əlavə edirik ki, şifrəsini dəyişməli olanları filtr edə biləsiniz
+    list_filter = ("is_locked", "totp_confirmed", "must_change_password", "is_active", "organization")
+
     search_fields = ("username", "email", "first_name", "last_name", "fin_kod")
     readonly_fields = ("totp_secret_encrypted", "failed_login_attempts", "locked_at")
     inlines = [UserModulePermissionInline]
 
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("Əlavə məlumat", {"fields": ("phone", "fin_kod", "id_card_serial", "organization")}),
+        # Təhlükəsizlik bölməsinə must_change_password əlavə olundu
         ("Təhlükəsizlik", {"fields": (
+            "must_change_password",
             "failed_login_attempts", "is_locked", "locked_at",
             "totp_confirmed", "totp_secret_encrypted",
         )}),
     )
 
-    actions = ["unlock_users", "reset_totp_for_users"]
+    actions = ["unlock_users", "reset_totp_for_users", "force_password_change"]
 
     @admin.action(description="Seçilmiş istifadəçilərin kilidini aç")
     def unlock_users(self, request, queryset):
@@ -52,7 +58,12 @@ class UserAdmin(DjangoUserAdmin):
         for user in queryset:
             user.reset_totp()
 
+    # İrəlidəadmin paneldən toplu şəkildə istifadəçini şifrə dəyişməyə məcbur etmək üçün action da əlavə edə bilərsiniz:
+    @admin.action(description="Seçilmiş istifadəçiləri şifrə dəyişməyə məcbur et (must_change_password=True)")
+    def force_password_change(self, request, queryset):
+        queryset.update(must_change_password=True)
 
+        
 @admin.register(PasswordResetCode)
 class PasswordResetCodeAdmin(admin.ModelAdmin):
     list_display = ("user", "created_at", "expires_at", "used", "requested_ip")

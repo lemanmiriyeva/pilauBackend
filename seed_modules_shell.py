@@ -81,4 +81,4 @@ Module.objects.get_or_create(
               "icon": "percent", "order": 4},
 )
 
-print("Modullar yaradıldı:", list(Module.objects.values_list("title", flat=True)))
+# print("Modullar yaradıldı:", list(Module.objects.values_list("title", flat=True)))
