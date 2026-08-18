@@ -258,14 +258,38 @@ class WorkflowConfigView(APIView):
 
 
 class NotificationListView(APIView):
-    """GET /api/workflow/notifications/ - cari istifadəçinin son bildirişləri + oxunmamış sayı."""
+    """GET /api/workflow/notifications/ - cari istifadəçinin bildirişləri + oxunmamış sayı.
+
+    Query param-lar (ikisi də optional - bell dropdown-u parametrsiz çağırır, ilk 50-ni alır):
+      ?page=1&page_size=20 - tam bildirişlər səhifəsi üçün səhifələmə
+      ?unread=true         - yalnız oxunmamışları göstər
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        qs = Notification.objects.filter(recipient=request.user)[:50]
+        qs = Notification.objects.filter(recipient=request.user)
+        if str(request.query_params.get("unread", "")).lower() in ("1", "true", "yes"):
+            qs = qs.filter(is_read=False)
+
+        unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 50))))
+        except (TypeError, ValueError):
+            page, page_size = 1, 50
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        page_qs = qs[start:start + page_size]
+
         return Response({
-            "unread_count": Notification.objects.filter(recipient=request.user, is_read=False).count(),
-            "results": NotificationSerializer(qs, many=True).data,
+            "unread_count": unread_count,
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": start + page_size < total,
+            "results": NotificationSerializer(page_qs, many=True).data,
         })
 
 
