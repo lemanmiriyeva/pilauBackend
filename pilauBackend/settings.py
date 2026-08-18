@@ -182,14 +182,15 @@ ADMIN_CONTACT_PHONE = config("ADMIN_CONTACT_PHONE", default="")
 # --------------------------------------------------------------------------
 # Email
 # --------------------------------------------------------------------------
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend" if DJANGO_ENV == "production" \
-    else "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST \
+    else "django.core.mail.backends.console.EmailBackend"
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=(EMAIL_PORT != 465), cast=bool)
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=(EMAIL_PORT == 465), cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@example.gov.az")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "noreply@example.gov.az")
 
 # --------------------------------------------------------------------------
 # CORS - yalnix frontend origin-e icaze
