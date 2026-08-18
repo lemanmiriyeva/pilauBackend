@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/organizations/", include("organizations.urls")),
     path("api/permissions/", include("permissions_module.urls")),
     path("api/licenses/", include("licenses.urls")),
+    path("api/workflow/", include("workflow.urls")),
 ]
 
 if settings.DEBUG:

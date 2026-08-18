@@ -87,10 +87,10 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "first_name", "last_name", "username", "email", "phone",
             "organization", "organization_detail", "fin_kod", "id_card_serial",
-            "department", "position", "is_org_admin",
+            "department", "position", "is_org_admin", "is_staff",
             "is_active", "is_locked", "totp_confirmed", "date_joined",
         ]
-        read_only_fields = ["id", "is_org_admin", "is_locked", "totp_confirmed", "date_joined"]
+        read_only_fields = ["id", "is_org_admin", "is_staff", "is_locked", "totp_confirmed", "date_joined"]
 
 
 class UserListSerializer(serializers.ModelSerializer):

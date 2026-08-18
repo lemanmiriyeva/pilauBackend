@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "permissions_module",
     "audit",
     "licenses",
+    "workflow",
 ]
 
 MIDDLEWARE = [
