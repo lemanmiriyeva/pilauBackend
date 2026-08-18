@@ -13,6 +13,7 @@ from licenses.serializers import (
     PermitDocumentDetailSerializer,
     PermitDocumentListSerializer,
 )
+from workflow.notify import notify_stage1_reviewers
 
 FILE_FIELD_PREFIX = "file__"
 
@@ -124,6 +125,12 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
                 field_label=labels_by_key.get(field_key, field_key),
                 file=uploaded_file, original_name=uploaded_file.name,
             )
+
+        try:
+            notify_stage1_reviewers(document)
+        except Exception:
+            # Bildiriş/e-poçt problemi sənəd yaradılmasını heç vaxt pozmamalıdır.
+            pass
 
         out = PermitDocumentDetailSerializer(document, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)

@@ -84,6 +84,63 @@ class ApproverPermission(models.Model):
         return f"{self.user} · {self.get_doc_type_display()} · {'✓' if self.can_approve else '—'}"
 
 
-from django.db import models
+class DocumentWorkflowConfig(models.Model):
+    """Sənəd növü üzrə mərhələli təsdiq axınının marşrutlanması.
 
-# Create your models here.
+    1-ci mərhələ ya müraciət edən təşkilatın öz admininə (stage1_mode='qurum'), ya da
+    birbaşa Nazirliyin təyin etdiyi konkret bir işçiyə (stage1_mode='msn', bax stage1_user)
+    gedir. 2-ci mərhələ (son təsdiq) hər zaman Nazirlik tərəfindəndir - stage2_user bunun
+    üçün təyin edilmiş konkret işçidir.
+
+    Hər iki halda 'msn' seçildikdə təyin oluna bilən istifadəçilər yalnız həmin doc_type
+    üzrə ApproverPermission (Təsdiq hüquqları) verilmiş şəxslərdir - bax _eligible_user_ids.
+    """
+    STAGE1_CHOICES = [("qurum", "Qurum"), ("msn", "MSN")]
+
+    doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES, unique=True)
+    stage1_mode = models.CharField("1-ci mərhələ", max_length=10, choices=STAGE1_CHOICES, default="qurum")
+    stage1_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+        verbose_name="1-ci mərhələ icraçısı (MSN seçildikdə)",
+    )
+    stage2_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+        verbose_name="2-ci mərhələ icraçısı (MSN)",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Sənəd növü təsdiq axını"
+        verbose_name_plural = "Sənəd növləri təsdiq axınları"
+        ordering = ["doc_type"]
+
+    def __str__(self):
+        return f"{self.get_doc_type_display()} · 1-ci: {self.get_stage1_mode_display()} · 2-ci: MSN"
+
+
+class Notification(models.Model):
+    """Sadə daxili bildiriş - sənəd 1-ci/2-ci mərhələ yoxlamasına düşdükdə icraçılara göndərilir.
+    E-poçt paralel olaraq (asinxron) göndərilir, bax workflow.notify."""
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications",
+    )
+    title = models.CharField("Başlıq", max_length=255)
+    body = models.TextField("Mətn", blank=True)
+    link = models.CharField("Keçid (frontend path)", max_length=255, blank=True)
+    is_read = models.BooleanField("Oxunub", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bildiriş"
+        verbose_name_plural = "Bildirişlər"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.recipient} · {self.title}"

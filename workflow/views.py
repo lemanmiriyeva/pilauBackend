@@ -8,8 +8,8 @@ from licenses.field_schema import DOC_TYPES
 from organizations.models import Organization
 from organizations.permissions import is_full_admin, is_org_admin, scoped_organization_ids
 
-from workflow.models import ApproverPermission, OrgReviewerPermission
-from workflow.serializers import PermissionToggleSerializer
+from workflow.models import ApproverPermission, DocumentWorkflowConfig, Notification, OrgReviewerPermission
+from workflow.serializers import NotificationSerializer, PermissionToggleSerializer, WorkflowConfigUpdateSerializer
 
 DOC_TYPES_PAYLOAD = [{"key": key, "label": label} for key, label in DOC_TYPES]
 
@@ -171,3 +171,115 @@ class ApproversListView(APIView):
                 "position": u.position,
             } for u in users
         ])
+
+
+def _eligible_msn_users(doc_type):
+    user_ids = ApproverPermission.objects.filter(
+        doc_type=doc_type, can_approve=True
+    ).values_list("user_id", flat=True)
+    users = User.objects.filter(id__in=user_ids, is_active=True).order_by("first_name", "last_name")
+    return [
+        {
+            "id": u.id,
+            "full_name": (f"{u.first_name} {u.last_name}".strip() or u.username),
+            "department": u.department,
+            "position": u.position,
+        } for u in users
+    ]
+
+
+class WorkflowConfigView(APIView):
+    """Sənəd növü üzrə mərhələli təsdiq axınının marşrutlanması (1-ci mərhələ: Qurum/MSN,
+    2-ci mərhələ: həmişə MSN). Yalnız Nazirlik admini görə/dəyişə bilər.
+
+    GET  /api/workflow/workflow-config/
+        Bütün doc_type-lar üçün cari konfiqurasiyanı (yoxdursa defolt 'qurum') VƏ hər biri
+        üçün seçilə bilən MSN icraçılarının siyahısını (ApproverPermission-a əsasən) qaytarır.
+    PUT  /api/workflow/workflow-config/
+        Body: {"doc_type": "istehsal", "stage1_mode": "qurum"|"msn",
+               "stage1_user": <id|null>, "stage2_user": <id>}
+        Tək bir doc_type-ın axınını yaradır/yeniləyir.
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        configs_by_type = {c.doc_type: c for c in DocumentWorkflowConfig.objects.all()}
+
+        rows = []
+        for key, label in DOC_TYPES:
+            config = configs_by_type.get(key)
+            rows.append({
+                "doc_type": key,
+                "label": label,
+                "stage1_mode": config.stage1_mode if config else "qurum",
+                "stage1_user": config.stage1_user_id if config else None,
+                "stage2_user": config.stage2_user_id if config else None,
+                "eligible_users": _eligible_msn_users(key),
+            })
+        return Response(rows)
+
+    def put(self, request):
+        serializer = WorkflowConfigUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        eligible_ids = {u.id for u in User.objects.filter(
+            id__in=ApproverPermission.objects.filter(
+                doc_type=data["doc_type"], can_approve=True
+            ).values_list("user_id", flat=True)
+        )}
+
+        if data["stage1_mode"] == "msn" and data.get("stage1_user") not in eligible_ids:
+            return Response(
+                {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if data.get("stage2_user") not in eligible_ids:
+            return Response(
+                {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        config, _ = DocumentWorkflowConfig.objects.update_or_create(
+            doc_type=data["doc_type"],
+            defaults={
+                "stage1_mode": data["stage1_mode"],
+                "stage1_user_id": data.get("stage1_user") if data["stage1_mode"] == "msn" else None,
+                "stage2_user_id": data.get("stage2_user"),
+                "updated_by": request.user,
+            },
+        )
+        return Response({
+            "doc_type": config.doc_type,
+            "stage1_mode": config.stage1_mode,
+            "stage1_user": config.stage1_user_id,
+            "stage2_user": config.stage2_user_id,
+        })
+
+
+class NotificationListView(APIView):
+    """GET /api/workflow/notifications/ - cari istifadəçinin son bildirişləri + oxunmamış sayı."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = Notification.objects.filter(recipient=request.user)[:50]
+        return Response({
+            "unread_count": Notification.objects.filter(recipient=request.user, is_read=False).count(),
+            "results": NotificationSerializer(qs, many=True).data,
+        })
+
+
+class NotificationMarkReadView(APIView):
+    """POST /api/workflow/notifications/<id>/read/ - tək bildirişi oxunmuş kimi işarələyir.
+    POST /api/workflow/notifications/read-all/ - hamısını oxunmuş kimi işarələyir (pk=0 göndərilir)."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk=None):
+        if pk in (None, 0, "0"):
+            Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+            return Response({"detail": "Bütün bildirişlər oxunmuş kimi işarələndi."})
+
+        notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
+        notification.is_read = True
+        notification.save(update_fields=["is_read"])
+        return Response({"detail": "Oxunmuş kimi işarələndi."})
