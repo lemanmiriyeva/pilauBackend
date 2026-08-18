@@ -1,7 +1,13 @@
 from rest_framework import serializers
 
 from licenses.field_schema import DOC_TYPES, get_schema
-from licenses.models import PermitDocument, PermitDocumentFile
+from licenses.models import ApprovalSettings, PermitDocument, PermitDocumentFile
+
+
+class ApprovalSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ApprovalSettings
+        fields = ["staged_approval_enabled", "updated_at"]
 
 
 class PermitDocumentFileSerializer(serializers.ModelSerializer):
@@ -18,7 +24,7 @@ class PermitDocumentListSerializer(serializers.ModelSerializer):
         model = PermitDocument
         fields = [
             "id", "number", "title", "doc_type", "category",
-            "applicant_name", "issue_date", "expiry_date", "status",
+            "applicant_name", "issue_date", "expiry_date", "status", "approval_stage",
         ]
 
 
@@ -26,6 +32,13 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
     """Image 3/4 - 'Bax' düyməsi ilə açılan detal görünüşü."""
     category = serializers.CharField(source="get_doc_type_display", read_only=True)
     files = PermitDocumentFileSerializer(many=True, read_only=True)
+    stage1_approved_by_name = serializers.CharField(
+        source="stage1_approved_by.get_full_name", read_only=True, default=""
+    )
+    stage2_approved_by_name = serializers.CharField(
+        source="stage2_approved_by.get_full_name", read_only=True, default=""
+    )
+    rejected_by_name = serializers.CharField(source="rejected_by.get_full_name", read_only=True, default="")
 
     class Meta:
         model = PermitDocument
@@ -35,6 +48,10 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
             "organization", "authorized_person",
             "applicant_name", "voen", "fin_kod", "department", "position", "phone", "email",
             "issue_date", "expiry_date", "status",
+            "approval_stage",
+            "stage1_approved_by_name", "stage1_approved_at", "stage1_comment",
+            "stage2_approved_by_name", "stage2_approved_at", "stage2_comment",
+            "rejected_by_name", "rejected_at", "rejection_reason",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "number", "created_at", "updated_at"]
