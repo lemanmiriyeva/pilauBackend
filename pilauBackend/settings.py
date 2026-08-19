@@ -5,7 +5,6 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import Config, Csv, RepositoryEnv,config
-from tutorial.settings import ALLOWED_HOSTS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

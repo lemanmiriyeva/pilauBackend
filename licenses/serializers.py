@@ -42,6 +42,7 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
         source="stage2_approved_by.get_full_name", read_only=True, default=""
     )
     rejected_by_name = serializers.CharField(source="rejected_by.get_full_name", read_only=True, default="")
+    certificate_id = serializers.SerializerMethodField()
 
     class Meta:
         model = PermitDocument
@@ -55,9 +56,16 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
             "stage1_approved_by_name", "stage1_approved_at", "stage1_comment",
             "stage2_approved_by_name", "stage2_approved_at", "stage2_comment",
             "rejected_by_name", "rejected_at", "rejection_reason",
+            "certificate_id",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "number", "created_at", "updated_at"]
+
+    def get_certificate_id(self, obj):
+        # Sənəd tam təsdiqlənibsə (bax PermitDocument.approve_stage) LicenseCertificate
+        # OneToOne olaraq artıq mövcuddur - "Sənədə bax" düyməsi üçün frontend-ə ötürülür.
+        certificate = getattr(obj, "certificate", None)
+        return certificate.id if certificate else None
 
 
 class PermitDocumentCreateSerializer(serializers.ModelSerializer):

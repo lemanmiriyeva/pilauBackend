@@ -58,6 +58,39 @@ def _user_is_any_approver(user) -> bool:
     ).exists()
 
 
+class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
+    """Lisenziya tam təsdiqləndikdən (2-ci mərhələ) sonra avtomatik yaranan rəsmi sənəd qeydi.
+    Görüntü hazırda generic-dir (bax LicenseCertificateSerializer.schema) - real vizual şablon
+    təqdim ediləndə buradan render ediləcək.
+
+    GET  /api/licenses/certificates/            - cari istifadəçinin görə bildiyi sənədlər
+    GET  /api/licenses/certificates/<id>/        - tək sənəd (schema + form_data ilə)
+    POST /api/licenses/certificates/<id>/complete/ - 'Tamamlandı' düyməsi. Sənəd bunsuz da
+         yaradılıb (bax PermitDocument.approve_stage) - bu, sadəcə istifadəçinin sənədi
+         nəzərdən keçirib təsdiqlədiyini qeyd edir, LicenseCertificate-i YENİDƏN YARATMIR.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = LicenseCertificateSerializer
+    queryset = LicenseCertificate.objects.select_related("permit_document", "permit_document__organization")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser or user.is_staff or _user_is_any_approver(user):
+            return qs
+        org_ids = scoped_organization_ids(user)
+        if org_ids is not None:
+            qs = qs.filter(permit_document__organization_id__in=org_ids)
+        return qs
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        certificate = self.get_object()
+        if certificate.status != "tamamlandi":
+            certificate.mark_completed(request.user)
+        return Response(LicenseCertificateSerializer(certificate).data)
+
+
 class PermitDocumentSchemaView(APIView):
     """Frontend forması bu endpoint-dən sahə siyahısını (fayl + manual) alır.
     GET /api/licenses/permit-documents/schema/?doc_type=ixrac|idxal

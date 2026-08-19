@@ -5,6 +5,7 @@ from licenses import views
 
 router = DefaultRouter()
 router.register("permit-documents", views.PermitDocumentViewSet, basename="permit-document")
+router.register("certificates", views.LicenseCertificateView, basename="license-certificate")
 
 urlpatterns = [
     path("permit-documents/schema/", views.PermitDocumentSchemaView.as_view(), name="permit_document_schema"),
