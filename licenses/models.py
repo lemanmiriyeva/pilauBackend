@@ -12,10 +12,12 @@ APPROVAL_STAGE_CHOICES = (
 
 
 class ApprovalSettings(models.Model):
-    """Tək qeydlik (singleton) qlobal tənzimləmə - bax ApprovalSettings.get_solo().
-    'staged_approval_enabled' söndürüləndə yeni yaradılan sənədlər heç bir təsdiqə
-    ehtiyac olmadan birbaşa 'aktiv' statusu ilə yaradılır (bax PermitDocument.save)."""
+    """Hər lisenziya kateqoriyası (doc_type) üçün AYRICA tənzimlənən mərhələli təsdiq keçidi.
+    Konkret kateqoriyada 'staged_approval_enabled' söndürüləndə, HƏMİN kateqoriyada yeni
+    yaradılan sənədlər heç bir təsdiqə ehtiyac olmadan birbaşa 'aktiv' statusu ilə yaradılır
+    (bax PermitDocument.save). Digər kateqoriyalara təsir etmir."""
 
+    doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES, unique=True)
     staged_approval_enabled = models.BooleanField("Mərhələli təsdiq aktivdir", default=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
@@ -25,14 +27,23 @@ class ApprovalSettings(models.Model):
     class Meta:
         verbose_name = "Təsdiq tənzimləməsi"
         verbose_name_plural = "Təsdiq tənzimləmələri"
+        ordering = ["doc_type"]
 
     def __str__(self):
-        return "Mərhələli təsdiq: AÇIQ" if self.staged_approval_enabled else "Mərhələli təsdiq: SÖNÜK"
+        state = "AÇIQ" if self.staged_approval_enabled else "SÖNÜK"
+        return f"{self.get_doc_type_display()}: Mərhələli təsdiq {state}"
 
     @classmethod
-    def get_solo(cls) -> "ApprovalSettings":
-        obj, _ = cls.objects.get_or_create(pk=1)
+    def get_for(cls, doc_type: str) -> "ApprovalSettings":
+        obj, _ = cls.objects.get_or_create(doc_type=doc_type)
         return obj
+
+    @classmethod
+    def all_as_dict(cls) -> dict:
+        """Bütün kateqoriyalar üçün cari vəziyyət - hələ sətri yaradılmayan kateqoriyalar
+        defolt olaraq AÇIQ sayılır (mərhələli təsdiqin defolt davranışı)."""
+        existing = {row.doc_type: row.staged_approval_enabled for row in cls.objects.all()}
+        return {dt: existing.get(dt, True) for dt, _ in DOC_TYPES}
 
 
 def _default_number(doc_type: str) -> str:
@@ -120,16 +131,19 @@ class PermitDocument(models.Model):
         creating = self._state.adding
         if not self.number:
             self.number = _default_number(self.doc_type)
-        # Mərhələli təsdiq söndürülübsə, yeni sənəd birbaşa aktiv olaraq yaradılır -
-        # bax ApprovalSettings, licenses/views.py PermitDocumentCreateSerializer istifadəsi.
-        if creating and self.status == "gozleyir" and not ApprovalSettings.get_solo().staged_approval_enabled:
+        # Bu kateqoriyada mərhələli təsdiq söndürülübsə, yeni sənəd birbaşa aktiv olaraq
+        # yaradılır - bax ApprovalSettings, licenses/views.py PermitDocumentCreateSerializer.
+        if creating and self.status == "gozleyir" and not ApprovalSettings.get_for(self.doc_type).staged_approval_enabled:
             self.status = "aktiv"
         super().save(*args, **kwargs)
 
-    def approve_stage(self, user, comment: str = "") -> None:
+    def approve_stage(self, user, comment: str = "") -> "LicenseCertificate | None":
         """Cari mərhələni təsdiqləyir: 1-ci mərhələdən 2-ciyə keçir, 2-ci mərhələ
-        təsdiqlənəndə isə sənəd 'aktiv' olur."""
+        təsdiqlənəndə isə sənəd 'aktiv' olur VƏ avtomatik olaraq (LicenseCertificate) rəsmi
+        sənəd qeydi yaradılır - bax LicenseCertificate, workflow.notify.notify_certificate_ready.
+        Yaradılmış sənəd qeydini qaytarır (yalnız indicə 2-ci mərhələ təsdiqləndikdə), əks halda None."""
         now = timezone.now()
+        certificate = None
         if self.approval_stage == 1:
             self.stage1_approved_by = user
             self.stage1_approved_at = now
@@ -141,6 +155,12 @@ class PermitDocument(models.Model):
             self.stage2_comment = comment
             self.status = "aktiv"
         self.save()
+
+        if self.status == "aktiv":
+            certificate, _ = LicenseCertificate.objects.get_or_create(
+                permit_document=self, defaults={"form_data": self.form_data}
+            )
+        return certificate
 
     def reject(self, user, reason: str) -> None:
         self.status = "legv"
@@ -166,3 +186,64 @@ class PermitDocumentFile(models.Model):
 
     def __str__(self):
         return f"{self.document.number} - {self.field_label or self.field_key}"
+
+
+def _default_certificate_number() -> str:
+    year = timezone.now().year
+    count = LicenseCertificate.objects.filter(number__startswith=f"SND-{year}-").count() + 1
+    return f"SND-{year}-{count:04d}"
+
+
+class LicenseCertificate(models.Model):
+    """Lisenziya tam təsdiqləndikdən (2-ci mərhələ) sonra AVTOMATİK yaranan rəsmi sənəd qeydi.
+
+    PermitDocument-dən (müraciət/iş axını modeli) QƏSDƏN AYRI bir modeldir - konseptual olaraq
+    "müraciət" ilə "nəticədə yaranan rəsmi sənəd" fərqli şeylərdir, gələcəkdə sənədin öz həyat
+    dövrü (yenidən çap, ləğv, dublikat və s.) ola bilər. OneToOne ilə müraciətə bağlıdır.
+
+    Hazırda vizual şablon hazır olmadığı üçün yalnız müraciət zamanı doldurulan anketin JSON
+    köçürməsini (snapshot - mənbə sənəd sonradan dəyişsə belə bu qeyd təsirlənməməlidir) saxlayır;
+    real şablon/dizayn təqdim ediləndə buradan render ediləcək.
+
+    'Tamamlandı' düyməsi bu qeydi YARATMIR (avtomatik, təsdiqlə birlikdə yaranır) - yalnız
+    istifadəçinin sənədi nəzərdən keçirib təsdiqlədiyini (status='tamamlandi') qeyd edir."""
+
+    STATUS_CHOICES = (
+        ("qaralama", "Qaralama"),
+        ("tamamlandi", "Tamamlandı"),
+    )
+
+    permit_document = models.OneToOneField(
+        PermitDocument, on_delete=models.CASCADE, related_name="certificate",
+    )
+    number = models.CharField("Sənəd nömrəsi", max_length=30, unique=True, blank=True)
+    form_data = models.JSONField("Lisenziya anketi (snapshot)", default=dict, blank=True)
+    status = models.CharField("Status", max_length=20, choices=STATUS_CHOICES, default="qaralama")
+
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="completed_certificates",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Lisenziya sənədi"
+        verbose_name_plural = "Lisenziya sənədləri"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.number or f"Sənəd #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = _default_certificate_number()
+        super().save(*args, **kwargs)
+
+    def mark_completed(self, user) -> None:
+        self.status = "tamamlandi"
+        self.completed_by = user
+        self.completed_at = timezone.now()
+        self.save()

@@ -16,7 +16,8 @@ DOC_TYPE_LIST_ROUTE = {
     "idxal": "/modullar/lisenziya-senedler/idxal-ixrac",
     "istehsal": "/modullar/lisenziya-senedler/istehsal",
     "xususi_satis": "/modullar/lisenziya-senedler/xususi-satis",
-    "edv_guzest": "/modullar/lisenziya-senedler/edv-guzesti",
+    "gomrukden_azadolma": "/modullar/lisenziya-senedler/edv-guzesti",
+    "edvden_azadolma": "/modullar/lisenziya-senedler/edv-guzesti",
 }
 
 
@@ -64,3 +65,41 @@ def notify_stage1_reviewers(document) -> None:
     ])
     for user in recipients:
         _send_email_async(user.email, title, body)
+
+
+def notify_stage2_reviewer(document) -> None:
+    """1-ci mərhələ təsdiqləndikdən dərhal sonra çağırılır (bax
+    licenses.views.PermitDocumentViewSet.approve) - sənəd 2-ci mərhələyə keçəndə 2-ci mərhələ
+    icraçısına (həmişə MSN, bax DocumentWorkflowConfig.stage2_user) bildiriş göndərir."""
+    config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+    if not config or not config.stage2_user_id or not config.stage2_user.is_active:
+        return
+
+    title = f"Sənəd 2-ci mərhələ təsdiqini gözləyir — {document.number}"
+    body = (
+        f"{document.get_doc_type_display()} kateqoriyasında {document.number} nömrəli sənəd "
+        f"1-ci mərhələni keçdi və son təsdiqinizi gözləyir."
+    )
+    link = f"{DOC_TYPE_LIST_ROUTE.get(document.doc_type, '/modullar/lisenziya-senedler')}/{document.id}"
+
+    Notification.objects.create(recipient=config.stage2_user, title=title, body=body, link=link)
+    _send_email_async(config.stage2_user.email, title, body)
+
+
+def notify_certificate_ready(document, certificate) -> None:
+    """Lisenziya BÜTÜN mərhələlərdən keçib təsdiqləndikdə (ya da mərhələli təsdiq
+    söndürülübsə, sənəd yaradılan kimi) çağırılır - müraciəti göndərən şəxsə (created_by)
+    lisenziyasının hazır olduğunu bildirir və rəsmi sənədin göstərildiyi səhifəyə yönləndirir."""
+    recipient = document.created_by
+    if not recipient or not recipient.is_active:
+        return
+
+    title = f"Lisenziyanız təsdiqləndi — {document.number}"
+    body = (
+        f"{document.get_doc_type_display()} kateqoriyasında {document.number} nömrəli "
+        f"müraciətiniz təsdiqləndi. Rəsmi sənədinizi görmək üçün klikləyin."
+    )
+    link = f"/lisenziya-icazeleri/sened/{certificate.id}"
+
+    Notification.objects.create(recipient=recipient, title=title, body=body, link=link)
+    _send_email_async(recipient.email, title, body)

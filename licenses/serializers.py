@@ -1,13 +1,16 @@
 from rest_framework import serializers
 
 from licenses.field_schema import DOC_TYPES, get_schema
-from licenses.models import ApprovalSettings, PermitDocument, PermitDocumentFile
+from licenses.models import ApprovalSettings, LicenseCertificate, PermitDocument, PermitDocumentFile
 
 
 class ApprovalSettingsSerializer(serializers.ModelSerializer):
+    label = serializers.CharField(source="get_doc_type_display", read_only=True)
+
     class Meta:
         model = ApprovalSettings
-        fields = ["staged_approval_enabled", "updated_at"]
+        fields = ["doc_type", "label", "staged_approval_enabled", "updated_at"]
+        read_only_fields = ["doc_type", "label", "updated_at"]
 
 
 class PermitDocumentFileSerializer(serializers.ModelSerializer):
@@ -97,3 +100,33 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             validated_data["created_by"] = request.user
         return super().create(validated_data)
+
+
+class LicenseCertificateSerializer(serializers.ModelSerializer):
+    """Lisenziya tam təsdiqləndikdən sonra yaranan sənəd (bax LicenseCertificate).
+    Hazırda vizual şablon olmadığı üçün 'form_data' (lisenziya anketi sahələri) və onların
+    sxemini ('schema') qaytarır ki, frontend generic şəkildə göstərə bilsin."""
+    doc_type = serializers.CharField(source="permit_document.doc_type", read_only=True)
+    category = serializers.CharField(source="permit_document.get_doc_type_display", read_only=True)
+    permit_document_id = serializers.IntegerField(source="permit_document.id", read_only=True)
+    permit_number = serializers.CharField(source="permit_document.number", read_only=True)
+    applicant_name = serializers.CharField(source="permit_document.applicant_name", read_only=True)
+    issue_date = serializers.DateField(source="permit_document.issue_date", read_only=True)
+    expiry_date = serializers.DateField(source="permit_document.expiry_date", read_only=True)
+    schema = serializers.SerializerMethodField()
+    completed_by_name = serializers.CharField(
+        source="completed_by.get_full_name", read_only=True, default=""
+    )
+
+    class Meta:
+        model = LicenseCertificate
+        fields = [
+            "id", "number", "status", "form_data", "schema",
+            "doc_type", "category", "permit_document_id", "permit_number",
+            "applicant_name", "issue_date", "expiry_date",
+            "completed_by_name", "completed_at", "created_at",
+        ]
+        read_only_fields = ["id", "number", "status", "created_at"]
+
+    def get_schema(self, obj):
+        return get_schema(obj.permit_document.doc_type)["form_fields"]

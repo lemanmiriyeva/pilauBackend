@@ -9,5 +9,6 @@ router.register("permit-documents", views.PermitDocumentViewSet, basename="permi
 urlpatterns = [
     path("permit-documents/schema/", views.PermitDocumentSchemaView.as_view(), name="permit_document_schema"),
     path("applicant-info/", views.ApplicantInfoView.as_view(), name="applicant_info"),
+    path("approval-settings/", views.ApprovalSettingsView.as_view(), name="approval_settings"),
     path("", include(router.urls)),
 ]
