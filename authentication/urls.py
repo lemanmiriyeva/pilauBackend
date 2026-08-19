@@ -8,9 +8,9 @@ urlpatterns = [
     path("logout/", views.LogoutView.as_view(), name="logout"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
-    path("totp-setup-begin/", views.TOTPSetupBeginView.as_view(), name="totp_setup_begin"),
-    path("totp-setup-confirm/", views.TOTPSetupConfirmView.as_view(), name="totp_setup_confirm"),
-    path("totp-verify/", views.TOTPVerifyView.as_view(), name="totp_verify"),
+    path("totp/setup/begin/", views.TOTPSetupBeginView.as_view(), name="totp_setup_begin"),
+    path("totp/setup/confirm/", views.TOTPSetupConfirmView.as_view(), name="totp_setup_confirm"),
+    path("totp/verify/", views.TOTPVerifyView.as_view(), name="totp_verify"),
 
     path("password/forgot/", views.ForgotPasswordRequestView.as_view(), name="forgot_password_request"),
     path("password/forgot/confirm/", views.ForgotPasswordConfirmView.as_view(), name="forgot_password_confirm"),
