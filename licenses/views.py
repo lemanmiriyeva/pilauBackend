@@ -1,4 +1,5 @@
 from django.db import models
+from django.http import HttpResponse
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -8,6 +9,7 @@ from rest_framework.views import APIView
 from organizations.models import AuthorizedPerson
 from organizations.permissions import scoped_organization_ids
 
+from licenses.certificate_pdf import build_certificate_pdf
 from licenses.field_schema import DOC_TYPES, get_schema
 from licenses.models import ApprovalSettings, LicenseCertificate, PermitDocument, PermitDocumentFile
 from licenses.serializers import (
@@ -89,6 +91,19 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
         if certificate.status != "tamamlandi":
             certificate.mark_completed(request.user)
         return Response(LicenseCertificateSerializer(certificate).data)
+
+    @action(detail=True, methods=["get"])
+    def pdf(self, request, pk=None):
+        """Sənədi PDF formatında qaytarır (bax licenses.certificate_pdf).
+        ?download=1 versə 'Content-Disposition: attachment', əks halda brauzerdə (iframe)
+        birbaşa göstərilə bilən 'inline' cavab qaytarılır."""
+        certificate = self.get_object()
+        pdf_bytes = build_certificate_pdf(certificate)
+
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        disposition = "attachment" if request.query_params.get("download") else "inline"
+        response["Content-Disposition"] = f'{disposition}; filename="{certificate.number}.pdf"'
+        return response
 
 
 class PermitDocumentSchemaView(APIView):
