@@ -11,6 +11,7 @@ urlpatterns = [
     path("totp-setup-begin/", views.TOTPSetupBeginView.as_view(), name="totp_setup_begin"),
     path("totp-setup-confirm/", views.TOTPSetupConfirmView.as_view(), name="totp_setup_confirm"),
     path("totp-verify/", views.TOTPVerifyView.as_view(), name="totp_verify"),
+    path("totp/request-admin-help/", views.TOTPRequestAdminHelpView.as_view(), name="totp_request_admin_help"),
 
     path("password/forgot/", views.ForgotPasswordRequestView.as_view(), name="forgot_password_request"),
     path("password/forgot/confirm/", views.ForgotPasswordConfirmView.as_view(), name="forgot_password_confirm"),

@@ -20,6 +20,7 @@ from .serializers import (
     ForgotPasswordRequestSerializer,
     LoginSerializer,
     SelfProfileUpdateSerializer,
+    TOTPRequestAdminHelpSerializer,
     TOTPSetupConfirmSerializer,
     TOTPVerifySerializer,
     UnlockUserSerializer,
@@ -225,6 +226,53 @@ class TOTPVerifyView(APIView):
         log_security_event("LOGIN_SUCCESS", user=user, ip=ip)
         access, refresh = issue_jwt_pair(user)
         return Response({"access": access, "refresh": refresh, "user": UserSerializer(user).data})
+
+
+GENERIC_TOTP_ADMIN_HELP_RESPONSE = {
+    "detail": "Tələbiniz qəbul edildi. Administratorlarınız məlumatlandırıldı."
+}
+
+
+class TOTPRequestAdminHelpView(APIView):
+    """
+    İstifadəçi 2FA cihazını itirdikdə (bax: AdminResetTOTPView qeydi - self-service bərpa
+    YOXDUR) bu endpoint vasitəsilə öz təşkilatının admini/sistem adminlərinə "2FA-nı sıfırla"
+    tələbi göndərə bilər. Girişsiz (temp_token/JWT olmadan) çağırılır, ona görə forgot-password
+    axını kimi həmişə eyni (generic) cavab qaytarır - istifadəçinin mövcudluğunu sızdırmır.
+    """
+    permission_classes = [AllowAny]
+    throttle_scope = "forgot_password"
+
+    def post(self, request):
+        serializer = TOTPRequestAdminHelpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        username = serializer.validated_data["username"]
+        message = serializer.validated_data["message"]
+        ip = get_client_ip(request)
+
+        user = User.objects.filter(username=username, is_active=True).first()
+        if user:
+            admins = User.objects.filter(
+                Q(is_staff=True) | Q(is_org_admin=True, organization=user.organization),
+                is_active=True,
+            ).exclude(id=user.id).exclude(email="")
+
+            body_lines = [
+                f"İstifadəçi {user.username} ({user.first_name} {user.last_name}) "
+                f"2FA (autentifikator) üçün admin köməyi tələb edir.",
+                "2FA-nı sıfırlamaq üçün İnzibatçı Panelindən istifadə edin.",
+            ]
+            if message:
+                body_lines.append(f"İstifadəçinin mesajı: {message}")
+
+            for admin in admins:
+                send_mail_to(admin.email, "2FA üçün admin köməyi tələbi", "\n".join(body_lines))
+
+            log_security_event("TOTP_ADMIN_HELP_REQUESTED", user=user, ip=ip)
+        else:
+            log_security_event("TOTP_ADMIN_HELP_REQUESTED_INVALID", ip=ip, extra=f"username={username}")
+
+        return Response(GENERIC_TOTP_ADMIN_HELP_RESPONSE)
 
 
 class LogoutView(APIView):

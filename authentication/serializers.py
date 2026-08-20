@@ -159,5 +159,12 @@ class AdminResetTOTPSerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
 
 
+class TOTPRequestAdminHelpSerializer(serializers.Serializer):
+    """2FA cihazini itirmis istifadeci - self-service bərpa olmadigi ucun,
+    qurumunun/sistemin adminlərinə kömək tələbi göndərmək üçün (bax: TOTPRequestAdminHelpView)."""
+    username = serializers.CharField()
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class UnlockUserSerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
