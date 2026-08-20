@@ -87,19 +87,7 @@ WSGI_APPLICATION = "pilauBackend.wsgi.application"
 # --------------------------------------------------------------------------
 # DB - production-da Postgres, lokal deveetlopment-de sqlite
 # --------------------------------------------------------------------------
-if DJANGO_ENV == "production":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": config("DB_NAME"),
-            "USER": config("DB_USER"),
-            "PASSWORD": config("DB_PASSWORD"),
-            "HOST": config("DB_HOST"),
-            "PORT": config("DB_PORT", default="5432"),
-        }
-    }
-else:
-    DATABASES = {
+DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
@@ -185,6 +173,7 @@ EMAIL_HOST = config("EMAIL_HOST", default="")
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST \
     else "django.core.mail.backends.console.EmailBackend"
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=(EMAIL_PORT != 465), cast=bool)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=(EMAIL_PORT != 465), cast=bool)
 EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=(EMAIL_PORT == 465), cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
