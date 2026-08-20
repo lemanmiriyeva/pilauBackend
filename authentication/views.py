@@ -310,7 +310,11 @@ class ForgotPasswordConfirmView(APIView):
 
         user.set_password(data["new_password"])
         user.failed_login_attempts = 0
-        user.save(update_fields=["password", "failed_login_attempts"])
+        # Admin tərəfindən yaradılan istifadəçi ilk şifrəsini məhz bu (e-poçta gələn kod) axını
+        # ilə təyin edir - buna görə must_change_password də burada təmizlənməlidir, əks halda
+        # istifadəçi yeni şifrəsi ilə daxil olanda YENƏ "yeni şifrə təyin et" ekranına düşür.
+        user.must_change_password = False
+        user.save(update_fields=["password", "failed_login_attempts", "must_change_password"])
         reset.used = True
         reset.save(update_fields=["used"])
 
@@ -359,11 +363,17 @@ class MeView(APIView):
 # Admin-only: istifadəçi yaratma, kilidi açma, 2FA sıfırlama
 # ---------------------------------------------------------------------------
 
+DEFAULT_INITIAL_PASSWORD = "AA123456!"
+
+
 class CreateUserView(APIView):
     """Image 3-dəki 'Yeni istifadəçi' formu. Yalnız admin/idarəçi çağıra bilər.
 
-    Dizaynda şifrə sahəsi yoxdur -> şifrə göndərilməzsə təsadüfi generasiya olunur və
-    istifadəçiyə (mövcud 'şifrə unutdum' axını ilə eyni) e-poçtla şifrə-təyini kodu göndərilir.
+    Dizaynda şifrə sahəsi yoxdur -> şifrə göndərilməzsə HAMISI ÜÇÜN sabit ilkin şifrə
+    (DEFAULT_INITIAL_PASSWORD) təyin olunur. Kod/e-poçt YOXDUR - admin bu sabit şifrəni
+    istifadəçiyə özü bildirir. İstifadəçi bu şifrə ilə daxil olanda (must_change_password=True
+    olduğu üçün) avtomatik, kodsuz "yeni şifrə təyin et" ekranına yönləndirilir
+    (bax LoginView -> _next_login_step_response).
     'İcazə veriləcək modullar' + 'Status' (Baxış/Redaktə/Təsdiq) seçimləri varsa,
     UserModulePermission qeydləri də bu zaman yaradılır.
     """
@@ -377,7 +387,7 @@ class CreateUserView(APIView):
         data = dict(serializer.validated_data)
 
         modules_data = data.pop("modules", []) or []
-        password = data.pop("password", "") or generate_temp_password()
+        password = data.pop("password", "") or DEFAULT_INITIAL_PASSWORD
 
         user = User(**data)
         user.set_password(password)
@@ -398,22 +408,6 @@ class CreateUserView(APIView):
                     "granted_by": request.user,
                 },
             )
-
-        code = generate_numeric_code(6)
-        PasswordResetCode.objects.create(
-            user=user,
-            code_hash=hash_code(code),
-            expires_at=timezone.now() + timezone.timedelta(
-                minutes=settings.PASSWORD_RESET_CODE_TTL_MINUTES
-            ),
-            requested_ip=get_client_ip(request),
-        )
-        send_mail_to(
-            user.email, "Hesabınız yaradıldı",
-            f"Sizin üçün sistemdə hesab yaradıldı (istifadəçi adı: {user.username}).\n"
-            f"Şifrənizi təyin etmək üçün kod: {code}\n"
-            f"Kod {settings.PASSWORD_RESET_CODE_TTL_MINUTES} dəqiqə etibarlıdır.",
-        )
 
         log_security_event("USER_CREATED", user=request.user, ip=get_client_ip(request),
                             extra=f"created_user={user.username}")
@@ -527,12 +521,3 @@ class AdminResetTOTPView(APIView):
 def secrets_token() -> str:
     import secrets
     return secrets.token_hex(4)
-
-
-def generate_temp_password() -> str:
-    """İstifadəçi yaradılarkən şifrə göndərilməyibsə - istifadəçi görməyəcək, e-poçtla şifrə-təyini
-    kodu göndəriləcək (aşağıda) - ona görə mürəkkəblik siyasətinə cavab verən təsadüfi dəyər kifayətdir."""
-    import secrets
-    import string
-    alphabet = string.ascii_letters + string.digits + "!@#$%*"
-    return "".join(secrets.choice(alphabet) for _ in range(16))
