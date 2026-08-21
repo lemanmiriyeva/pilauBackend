@@ -214,7 +214,7 @@ class LicenseCertificate(models.Model):
     )
 
     SIGNATURE_METHOD_CHOICES = (
-        ("sim", "SİM İmza"),
+        ("sima", "SİM İmza"),
         ("asan", "Asan İmza"),
     )
 
