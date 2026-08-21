@@ -79,12 +79,30 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user.is_superuser or user.is_staff or _user_is_any_approver(user):
+
+        # Superuser / staff -> bütün sertifikatlar
+        if user.is_superuser or user.is_staff:
             return qs
-        org_ids = scoped_organization_ids(user)
-        if org_ids is not None:
-            qs = qs.filter(permit_document__organization_id__in=org_ids)
-        return qs
+
+        # Approver -> bütün sertifikatlar
+        if _user_is_any_approver(user):
+            return qs
+
+        # Qurum admini -> öz qurumunun sertifikatları
+        if user.is_org_admin:
+            org_ids = scoped_organization_ids(user)
+
+            if org_ids is not None:
+                return qs.filter(
+                    permit_document__organization_id__in=org_ids
+                )
+
+            return qs.none()
+
+        # Adi user -> yalnız öz yaratdığı sənədlərdən yaranan sertifikatlar
+        return qs.filter(
+            permit_document__created_by=user
+        )
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
@@ -234,43 +252,83 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         user = self.request.user
 
-        # Təhlükəsizlik: staff/superuser və mərhələli təsdiq icazəsi olanlar (approver-lər)
-        # bütün təşkilatların sənədlərini görür (rəy vermək üçün lazımdır), digərləri yalnız
-        # öz təşkilatının (+ alt-təşkilatlarının) sənədlərini.
-        if not _user_is_any_approver(user):
+        # 1. Superuser / staff -> bütün sənədləri görür
+        if user.is_superuser or user.is_staff:
+            pass
+
+        # 2. Approver -> bütün təşkilatların sənədlərini görür
+        elif _user_is_any_approver(user):
+            pass
+
+        # 3. Qurum admini -> öz qurumunun sənədlərini görür
+        elif user.is_org_admin:
             org_ids = scoped_organization_ids(user)
+
             if org_ids is not None:
                 qs = qs.filter(organization_id__in=org_ids)
+            else:
+                qs = qs.none()
 
+        # 4. Adi user -> YALNIZ ÖZ YARATDIĞI sənədləri görür
+        else:
+            qs = qs.filter(created_by=user)
+
+        # ---------------------------------------------------------
+        # Approval stage filter
+        # ---------------------------------------------------------
         approval_stage_param = self.request.query_params.get("approval_stage")
+
         if approval_stage_param:
-            # Təsdiq növbəsi (bax /lisenziya-icazeleri/yoxlamalarim) - yalnız gözləyən sənədlər,
-            # və yalnız bu istifadəçinin (DocumentWorkflowConfig marşrutuna görə) icraçı olduğu
-            # sənədlər qaytarılır.
             try:
                 stage = int(approval_stage_param)
             except (TypeError, ValueError):
                 return qs.none()
-            qs = qs.filter(status="gozleyir", approval_stage=stage)
-            if not user.is_superuser:
+
+            qs = qs.filter(
+                status="gozleyir",
+                approval_stage=stage
+            )
+
+            if not user.is_superuser and not user.is_staff:
                 configs = _workflow_configs()
+
                 allowed_ids = [
-                    doc.id for doc in qs
-                    if _user_can_approve_document(user, doc, configs.get(doc.doc_type))
+                    doc.id
+                    for doc in qs
+                    if _user_can_approve_document(
+                        user,
+                        doc,
+                        configs.get(doc.doc_type)
+                    )
                 ]
+
                 qs = qs.filter(id__in=allowed_ids)
 
+        # ---------------------------------------------------------
+        # Digər filterlər
+        # ---------------------------------------------------------
         doc_type = self.request.query_params.get("doc_type")
         status_param = self.request.query_params.get("status")
         search = self.request.query_params.get("search")
+
         if doc_type:
-            # Bir neçə növü vergüllə ayıraraq bir dəfəyə filtrləmək mümkündür,
-            # məs. 'ixrac,idxal' - bax idxal-ixrac/page.js.
-            qs = qs.filter(doc_type__in=[t.strip() for t in doc_type.split(",") if t.strip()])
+            qs = qs.filter(
+                doc_type__in=[
+                    t.strip()
+                    for t in doc_type.split(",")
+                    if t.strip()
+                ]
+            )
+
         if status_param:
             qs = qs.filter(status=status_param)
+
         if search:
-            qs = qs.filter(title__icontains=search) | qs.filter(number__icontains=search)
+            qs = qs.filter(
+                models.Q(title__icontains=search) |
+                models.Q(number__icontains=search)
+            )
+
         return qs
 
     @action(detail=True, methods=["post"])
