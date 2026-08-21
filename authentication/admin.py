@@ -43,7 +43,7 @@ class UserAdmin(DjangoUserAdmin):
         ("Təhlükəsizlik", {"fields": (
             "must_change_password",
             "failed_login_attempts", "is_locked", "locked_at",
-            "totp_confirmed", "totp_secret_encrypted",
+            "totp_confirmed", "totp_secret_encrypted","is_org_admin"
         )}),
     )
 
