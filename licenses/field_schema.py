@@ -12,13 +12,15 @@ DOC_TYPES = (
     ("idxal", "İdxal"),
     ("istehsal", "İstehsal"),
     ("xususi_satis", "Xüsusi Satış"),
-    ("edv_guzest", "ƏDV Güzəşt"),
+    ("gomrukden_azadolma", "Gömrükdən Azadolma"),
+    ("edvden_azadolma", "ƏDV-dən Azadolma"),
 )
 
-# Bax seed_modules_shell.py -> meta ("1 illik ..." / "Müddətsiz"): idxal/ixrac və ƏDV güzəşti
-# 1 illikdir (təsdiqlənəndə bitmə tarixi avtomatik +1 il qoyulur); istehsal və xüsusi satış isə
-# müddətsizdir (bitmə tarixi boş qalır). Bax: licenses/models.py -> PermitDocument.save()
-EXPIRING_DOC_TYPES = {"idxal", "ixrac", "edv_guzest"}
+# Bax seed_modules_shell.py -> meta ("1 illik ..." / "Müddətsiz"): idxal/ixrac və ƏDV güzəşt
+# (gömrükdən azadolma / ƏDV-dən azadolma) 1 illikdir (təsdiqlənəndə bitmə tarixi avtomatik
+# +1 il qoyulur); istehsal və xüsusi satış isə müddətsizdir (bitmə tarixi boş qalır).
+# Bax: licenses/models.py -> PermitDocument.save()
+EXPIRING_DOC_TYPES = {"idxal", "ixrac", "gomrukden_azadolma", "edvden_azadolma"}
 
 # --- 'İstehsal lisenziyası' üçün "Lisenziya anketi"-ndəki 'Lisenziya tipi' sahəsinin seçimləri ---
 LICENSE_TYPE_CHOICES = (
@@ -125,14 +127,32 @@ _XUSUSI_SATIS_FORM_FIELDS = [
     {"key": "selahiyyetli_organ", "label": "Səlahiyyətli orqan", "type": "text", "required": False, "auto": False},
 ]
 
-# --- "Fayl yüklə" rejimi - ƏDV Güzəşt icazə sənədi (Image 2) ---
-_EDV_GUZEST_FILE_FIELDS = [
+# --- "Fayl yüklə" rejimi - Gömrükdən Azadolma icazə sənədi ---
+_GOMRUKDEN_AZADOLMA_FILE_FIELDS = [
+    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (möhürlü)", "required": True, "max_size_mb": 10},
+    {"key": "muqavile_sureti", "label": "Müqavilənin surəti", "required": True, "max_size_mb": 100},
+    {"key": "invoys_sureti", "label": "3.	İdxal olunan malın invoice-nin sürəti", "required": True, "max_size_mb": 10},
+]
+
+# --- "Fayl yüklə" rejimi - ƏDV-dən Azadolma icazə sənədi ---
+_EDVDEN_AZADOLMA_FILE_FIELDS = [
     {"key": "muraciet_mektubu", "label": "Müraciət məktubu (möhürlü)", "required": True, "max_size_mb": 10},
     {"key": "muqavile_sureti", "label": "Müqavilənin surəti", "required": True, "max_size_mb": 100},
 ]
 
-# --- "Elektron müraciət forması" (Lisenziya anketi) - ƏDV Güzəşt icazə sənədi (Image 3) ---
-_EDV_GUZEST_FORM_FIELDS = [
+# --- "Elektron müraciət forması" (Lisenziya anketi) - Gömrükdən Azadolma icazə sənədi ---
+_GOMRUKDEN_AZADOLMA_FORM_FIELDS = [
+    {"key": "guzest_nomresi", "label": "Güzəşt nömrəsi", "type": "text", "required": True, "auto": True},
+    {"key": "senedin_novu", "label": "Sənəd növü", "type": "text", "required": True},
+    {"key": "mehsulun_kodu", "label": "Məhsulun kodu (XİF MN üzrə kod / HS Code)", "type": "text", "required": True},
+    {"key": "baslangic_tarixi", "label": "Başlanğıc tarixi (Sənədin qüvvəyə mindiyi gün)", "type": "date", "required": True},
+    {"key": "bitme_tarixi", "label": "Bitmə tarixi (+1 il, 365 gün sonra)", "type": "date", "required": False, "auto": True},
+    {"key": "techizatci", "label": "Təchizatçı", "type": "text", "required": True, "auto": True},
+    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
+]
+
+# --- "Elektron müraciət forması" (Lisenziya anketi) - ƏDV-dən Azadolma icazə sənədi ---
+_EDVDEN_AZADOLMA_FORM_FIELDS = [
     {"key": "guzest_nomresi", "label": "Güzəşt nömrəsi", "type": "text", "required": True, "auto": True},
     {"key": "senedin_novu", "label": "Sənəd növü", "type": "text", "required": True},
     {"key": "mehsulun_kodu", "label": "Məhsulun kodu (XİF MN üzrə kod / HS Code)", "type": "text", "required": True},
@@ -147,7 +167,8 @@ _SCHEMA_BY_DOC_TYPE = {
     "idxal": {"file_fields": _IDXAL_FILE_FIELDS, "form_fields": _FORM_FIELDS},
     "istehsal": {"file_fields": _ISTEHSAL_FILE_FIELDS, "form_fields": _ISTEHSAL_FORM_FIELDS},
     "xususi_satis": {"file_fields": _XUSUSI_SATIS_FILE_FIELDS, "form_fields": _XUSUSI_SATIS_FORM_FIELDS},
-    "edv_guzest": {"file_fields": _EDV_GUZEST_FILE_FIELDS, "form_fields": _EDV_GUZEST_FORM_FIELDS},
+    "gomrukden_azadolma": {"file_fields": _GOMRUKDEN_AZADOLMA_FILE_FIELDS, "form_fields": _GOMRUKDEN_AZADOLMA_FORM_FIELDS},
+    "edvden_azadolma": {"file_fields": _EDVDEN_AZADOLMA_FILE_FIELDS, "form_fields": _EDVDEN_AZADOLMA_FORM_FIELDS},
 }
 
 

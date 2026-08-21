@@ -20,7 +20,7 @@ from licenses.serializers import (
     PermitDocumentListSerializer,
     SignCertificateSerializer,
 )
-from workflow.models import DocumentWorkflowConfig
+from workflow.models import DocumentWorkflowConfig, OrgReviewerPermission
 from workflow.notify import notify_certificate_ready, notify_stage1_reviewers, notify_stage2_reviewer
 
 FILE_FIELD_PREFIX = "file__"
@@ -46,7 +46,7 @@ def _user_can_approve_document(user, document, config=None) -> bool:
     if document.approval_stage == 1:
         if config and config.stage1_mode == "msn":
             return bool(config.stage1_user_id) and config.stage1_user_id == user.id
-        return bool(user.is_org_admin) and user.organization_id == document.organization_id
+        return user.id in OrgReviewerPermission.eligible_user_ids(document.organization_id, document.doc_type)
 
     return bool(config) and config.stage2_user_id == user.id
 
@@ -155,14 +155,16 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
 
 class PermitDocumentSchemaView(APIView):
     """Frontend forması bu endpoint-dən sahə siyahısını (fayl + manual) alır.
-    GET /api/licenses/permit-documents/schema/?doc_type=ixrac|idxal
+    GET /api/licenses/permit-documents/schema/?doc_type=<DOC_TYPES-dən biri>
+    (bax: licenses/field_schema.py -> DOC_TYPES)
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         doc_type = request.query_params.get("doc_type")
         if doc_type not in dict(DOC_TYPES):
-            return Response({"detail": "doc_type 'ixrac' və ya 'idxal' olmalıdır."}, status=400)
+            valid = ", ".join(dict(DOC_TYPES).keys())
+            return Response({"detail": f"doc_type bunlardan biri olmalıdır: {valid}."}, status=400)
         return Response(get_schema(doc_type))
 
 

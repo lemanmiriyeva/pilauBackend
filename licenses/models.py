@@ -141,7 +141,13 @@ class PermitDocument(models.Model):
         """Cari mərhələni təsdiqləyir: 1-ci mərhələdən 2-ciyə keçir, 2-ci mərhələ
         təsdiqlənəndə isə sənəd 'aktiv' olur VƏ avtomatik olaraq (LicenseCertificate) rəsmi
         sənəd qeydi yaradılır - bax LicenseCertificate, workflow.notify.notify_certificate_ready.
-        Yaradılmış sənəd qeydini qaytarır (yalnız indicə 2-ci mərhələ təsdiqləndikdə), əks halda None."""
+        Yaradılmış sənəd qeydini qaytarır (yalnız indicə 2-ci mərhələ təsdiqləndikdə), əks halda None.
+
+        QEYD: 1-ci mərhələ təsdiqlənəndə, əgər təşkilat admini bu kateqoriya üçün 2-ci mərhələni
+        söndürübsə (bax workflow.models.OrgStage2Setting - 'Qurum yoxlaması icazələri' səhifəsi),
+        sənəd MSN-ə getmədən birbaşa aktivləşir."""
+        from workflow.models import OrgStage2Setting
+
         now = timezone.now()
         certificate = None
         if self.approval_stage == 1:
@@ -149,6 +155,12 @@ class PermitDocument(models.Model):
             self.stage1_approved_at = now
             self.stage1_comment = comment
             self.approval_stage = 2
+            if OrgStage2Setting.is_skipped(self.organization_id, self.doc_type):
+                self.status = "aktiv"
+                self.stage2_comment = (
+                    "2-ci mərhələ təşkilat admini tərəfindən bu kateqoriya üçün söndürülüb - "
+                    "avtomatik keçildi."
+                )
         else:
             self.stage2_approved_by = user
             self.stage2_approved_at = now
@@ -214,7 +226,7 @@ class LicenseCertificate(models.Model):
     )
 
     SIGNATURE_METHOD_CHOICES = (
-        ("sima", "SİM İmza"),
+        ("sim", "SİM İmza"),
         ("asan", "Asan İmza"),
     )
 
