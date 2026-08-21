@@ -213,6 +213,11 @@ class LicenseCertificate(models.Model):
         ("tamamlandi", "Tamamlandı"),
     )
 
+    SIGNATURE_METHOD_CHOICES = (
+        ("sim", "SİM İmza"),
+        ("asan", "Asan İmza"),
+    )
+
     permit_document = models.OneToOneField(
         PermitDocument, on_delete=models.CASCADE, related_name="certificate",
     )
@@ -225,6 +230,19 @@ class LicenseCertificate(models.Model):
         on_delete=models.SET_NULL, related_name="completed_certificates",
     )
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    # --- Elektron imza (SİM İmza / Asan İmza) ---
+    # QEYD: hazırda real e-imza şlüzü (mobil operator SİM İmza API-si və ya Asan İmza SDK/API-si)
+    # inteqrasiya edilməyib - LicenseCertificateView.sign action-ı MOCK işləyir (bax views.py).
+    # Real inteqrasiya üçün müvafiq operatorlardan/DVX-dən API təsdiqi, sertifikat və endpoint
+    # məlumatları tələb olunur; həmin məlumatlar əldə ediləndə sign action-ın daxili məntiqi
+    # əvəz olunmalıdır - bu sahələr və serializer artıq hazırdır.
+    is_signed = models.BooleanField("İmzalanıb", default=False)
+    signature_method = models.CharField(
+        "İmza üsulu", max_length=10, choices=SIGNATURE_METHOD_CHOICES, blank=True
+    )
+    signed_phone = models.CharField("İmza üçün istifadə olunan nömrə", max_length=20, blank=True)
+    signed_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

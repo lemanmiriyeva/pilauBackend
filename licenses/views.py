@@ -18,6 +18,7 @@ from licenses.serializers import (
     PermitDocumentCreateSerializer,
     PermitDocumentDetailSerializer,
     PermitDocumentListSerializer,
+    SignCertificateSerializer,
 )
 from workflow.models import DocumentWorkflowConfig
 from workflow.notify import notify_certificate_ready, notify_stage1_reviewers, notify_stage2_reviewer
@@ -104,6 +105,34 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
         disposition = "attachment" if request.query_params.get("download") else "inline"
         response["Content-Disposition"] = f'{disposition}; filename="{certificate.number}.pdf"'
         return response
+
+    @action(detail=True, methods=["post"])
+    def sign(self, request, pk=None):
+        """Sənədi SİM İmza / Asan İmza ilə imzalayır.
+
+        !!! MOCK - real şlüz inteqrasiya EDİLMƏYİB !!! Hazırda yalnız telefon nömrəsini
+        doğrulayıb sənədi imzalanmış kimi işarələyir. Real inteqrasiya üçün lazımdır:
+          - SİM İmza: mobil operatorun (Azercell/Bakcell/Nar) SOAP/REST şlüzü, təşkilat
+            üçün əldə edilmiş API təsdiqi/sertifikat.
+          - Asan İmza: DTX-in Asan İmza API-si (https://asanimza.az), müraciət olunmuş
+            inteqrasiya sazişi + client sertifikatı.
+        Hər iki halda əsl axın asinxrondur (istifadəçi telefonunda PIN təsdiqləyir, bu
+        müddətdə status 'pending' olur, sonra webhook/polling ilə yekunlaşır) - bu action
+        hazırda həmin gözləmə addımını simulyasiya etmədən birbaşa uğurlu nəticə qaytarır.
+        """
+        certificate = self.get_object()
+        serializer = SignCertificateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        from django.utils import timezone
+        certificate.is_signed = True
+        certificate.signature_method = data["method"]
+        certificate.signed_phone = data["phone"]
+        certificate.signed_at = timezone.now()
+        certificate.save(update_fields=["is_signed", "signature_method", "signed_phone", "signed_at"])
+
+        return Response(LicenseCertificateSerializer(certificate).data)
 
 
 class PermitDocumentSchemaView(APIView):

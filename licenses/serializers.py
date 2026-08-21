@@ -110,6 +110,14 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class SignCertificateSerializer(serializers.Serializer):
+    """Bax: LicenseCertificateView.sign action (views.py) - hazırda MOCK, real SİM İmza /
+    Asan İmza şlüzü inteqrasiya ediləndə burada dəyişiklik lazım olmaya bilər (eyni giriş
+    sahələri - üsul + telefon nömrəsi - real API-lərdə də tələb olunur)."""
+    method = serializers.ChoiceField(choices=LicenseCertificate.SIGNATURE_METHOD_CHOICES)
+    phone = serializers.CharField(max_length=20)
+
+
 class LicenseCertificateSerializer(serializers.ModelSerializer):
     """Lisenziya tam təsdiqləndikdən sonra yaranan sənəd (bax LicenseCertificate).
     Hazırda vizual şablon olmadığı üçün 'form_data' (lisenziya anketi sahələri) və onların
@@ -133,8 +141,12 @@ class LicenseCertificateSerializer(serializers.ModelSerializer):
             "doc_type", "category", "permit_document_id", "permit_number",
             "applicant_name", "issue_date", "expiry_date",
             "completed_by_name", "completed_at", "created_at",
+            "is_signed", "signature_method", "signed_phone", "signed_at",
         ]
-        read_only_fields = ["id", "number", "status", "created_at"]
+        read_only_fields = [
+            "id", "number", "status", "created_at",
+            "is_signed", "signature_method", "signed_phone", "signed_at",
+        ]
 
     def get_schema(self, obj):
         return get_schema(obj.permit_document.doc_type)["form_fields"]
