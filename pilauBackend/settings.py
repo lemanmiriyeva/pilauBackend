@@ -1,37 +1,60 @@
 """
 Django settings - maksimum tehlukesizlik konfiqurasiyasi ile.
 """
+
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import Config, Csv, RepositoryEnv,config
+from decouple import Config, Csv, RepositoryEnv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# python-decouple-in defolt config() funksiyasi .env-i CWD-den (serveri hardan ise
-# saldiginizdan) axtarir - bu, IDE/terminal-dan asili olaraq tapilmamasina sebeb olur.
-# Ona gore .env-i HEMISE BASE_DIR-e (manage.py-in yaninda) gore, cwd-den asili olmadan oxuyuruq.
+# ==========================================================================
+# .ENV
+# ==========================================================================
+
 _env_path = BASE_DIR / ".env"
+
 if not _env_path.exists():
     raise RuntimeError(
         f".env faylı tapılmadı: {_env_path}\n"
-        f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda (manage.py ilə eyni yerdə) "
-        f".env adı ilə saxlayın: cp .env.example .env"
+        f".env.example-i kopyalayıb '{BASE_DIR}' qovluğunda "
+        f"(manage.py ilə eyni yerdə) .env adı ilə saxlayın."
     )
+
 config = Config(RepositoryEnv(str(_env_path)))
 
-# --------------------------------------------------------------------------
-# Esas
-# --------------------------------------------------------------------------
-DJANGO_ENV = config("DJANGO_ENV", default="development")
-DEBUG = config("DEBUG", default=False, cast=bool)
+# ==========================================================================
+# ƏSAS
+# ==========================================================================
+
+DJANGO_ENV = config(
+    "DJANGO_ENV",
+    default="development"
+)
+
+DEBUG = config(
+    "DEBUG",
+    default=False,
+    cast=bool
+)
+
 SECRET_KEY = config("SECRET_KEY")
-# ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
-ALLOWED_HOSTS=['*']
+
+# Server daxili IP ilə işlədiyi üçün
+ALLOWED_HOSTS = [
+    "*",
+]
+
 AUTH_USER_MODEL = "authentication.User"
+
+# ==========================================================================
+# INSTALLED APPS
+# ==========================================================================
 
 INSTALLED_APPS = [
     "jazzmin",
+
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -42,6 +65,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+
     "corsheaders",
 
     "authentication",
@@ -52,25 +76,44 @@ INSTALLED_APPS = [
     "workflow",
 ]
 
+# ==========================================================================
+# MIDDLEWARE
+# ==========================================================================
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+
     "corsheaders.middleware.CorsMiddleware",
+
     "django.contrib.sessions.middleware.SessionMiddleware",
+
     "django.middleware.common.CommonMiddleware",
+
     "django.middleware.csrf.CsrfViewMiddleware",
+
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+
     "django.contrib.messages.middleware.MessageMiddleware",
+
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+
     "audit.middleware.RequestAuditMiddleware",
 ]
+
+# ==========================================================================
+# URL / TEMPLATES
+# ==========================================================================
 
 ROOT_URLCONF = "pilauBackend.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
+
         "DIRS": [],
+
         "APP_DIRS": True,
+
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -84,245 +127,594 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "pilauBackend.wsgi.application"
 
-# --------------------------------------------------------------------------
-# DB - production-da Postgres, lokal deveetlopment-de sqlite
-# --------------------------------------------------------------------------
-DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+# ==========================================================================
+# DATABASE
+# ==========================================================================
 
-# --------------------------------------------------------------------------
-# Sifre siyaseti - Argon2 + guclu validatorlar
-# --------------------------------------------------------------------------
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
+
+# ==========================================================================
+# PASSWORD
+# ==========================================================================
+
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    {"NAME": "authentication.validators.ComplexityValidator"},
+    {
+        "NAME":
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+    },
+
+    {
+        "NAME":
+            "django.contrib.auth.password_validation."
+            "MinimumLengthValidator",
+
+        "OPTIONS": {
+            "min_length": 10
+        },
+    },
+
+    {
+        "NAME":
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+    },
+
+    {
+        "NAME":
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+    },
+
+    {
+        "NAME":
+            "authentication.validators.ComplexityValidator"
+    },
 ]
 
-# --------------------------------------------------------------------------
-# DRF + JWT (qisa omurlu access, rotate + blacklist edilen refresh)
-# --------------------------------------------------------------------------
+# ==========================================================================
+# DJANGO REST FRAMEWORK
+# ==========================================================================
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.ScopedRateThrottle",
     ),
+
     "DEFAULT_THROTTLE_RATES": {
         "login": "10/min",
         "totp_verify": "10/min",
         "forgot_password": "5/min",
     },
-    # "EXCEPTION_HANDLER": "pilauBackend.exception_handlers.custom_exception_handler",
 }
+
+# ==========================================================================
+# JWT
+# ==========================================================================
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+
     "ROTATE_REFRESH_TOKENS": True,
+
     "BLACKLIST_AFTER_ROTATION": True,
+
     "UPDATE_LAST_LOGIN": True,
+
     "ALGORITHM": "HS256",
-    "AUTH_HEADER_TYPES": ("Bearer",),
+
+    "AUTH_HEADER_TYPES": (
+        "Bearer",
+    ),
 }
 
-# --------------------------------------------------------------------------
-# 2FA / temp-token / lockout sabitleri
-# --------------------------------------------------------------------------
-TOTP_ENCRYPTION_KEY = config("TOTP_ENCRYPTION_KEY").encode()
+# ==========================================================================
+# 2FA
+# ==========================================================================
 
-# Erken (server basladiqda) yoxlama - yanlish/placeholder acar qalsa, ilk request-de deyil,
-# serveri qaldiranda aydin xeta versin. Novbeti '2fa-nı yükləyə bilmədi' kimi qeyri-müəyyən
-# xetalarin qarsisini alir.
+TOTP_ENCRYPTION_KEY = config(
+    "TOTP_ENCRYPTION_KEY"
+).encode()
+
 try:
     from cryptography.fernet import Fernet as _FernetCheck
+
     _FernetCheck(TOTP_ENCRYPTION_KEY)
+
 except Exception as _e:
+
     raise RuntimeError(
-        "TOTP_ENCRYPTION_KEY .env faylinda duzgun deyil (placeholder qalib ve ya sehv formatdadir). "
+        "TOTP_ENCRYPTION_KEY .env faylinda duzgun deyil "
+        "(placeholder qalib ve ya sehv formatdadir). "
         "Duzgun acar generasiya etmek ucun: "
-        "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
-        "ve neticeni .env-de TOTP_ENCRYPTION_KEY= olaraq yazin."
+        "python -c "
+        "\"from cryptography.fernet import Fernet; "
+        "print(Fernet.generate_key().decode())\""
     ) from _e
 
-TEMP_TOKEN_TTL_SECONDS = 300          # login -> 2FA arasindaki muveqqeti token omru
-MAX_FAILED_LOGIN_ATTEMPTS = 3         # 3-cu sehvden sonra bloklanir
+TEMP_TOKEN_TTL_SECONDS = 300
+
+MAX_FAILED_LOGIN_ATTEMPTS = 3
+
 PASSWORD_RESET_CODE_TTL_MINUTES = 10
-ADMIN_CONTACT_EMAIL = config("ADMIN_CONTACT_EMAIL", default="")
-ADMIN_CONTACT_PHONE = config("ADMIN_CONTACT_PHONE", default="")
 
-# --------------------------------------------------------------------------
-# Email
-# --------------------------------------------------------------------------
-EMAIL_HOST = config("EMAIL_HOST", default="")
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST \
-    else "django.core.mail.backends.console.EmailBackend"
-EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=(EMAIL_PORT != 465), cast=bool)
-EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=(EMAIL_PORT != 465), cast=bool)
-EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=(EMAIL_PORT == 465), cast=bool)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER or "noreply@example.gov.az")
+ADMIN_CONTACT_EMAIL = config(
+    "ADMIN_CONTACT_EMAIL",
+    default=""
+)
 
-# --------------------------------------------------------------------------
-# CORS - yalnix frontend origin-e icaze
-# --------------------------------------------------------------------------
-CORS_ALLOWED_ORIGINS = [config("FRONTEND_ORIGIN", default="http://localhost:3000")]
+ADMIN_CONTACT_PHONE = config(
+    "ADMIN_CONTACT_PHONE",
+    default=""
+)
+
+# ==========================================================================
+# EMAIL
+# ==========================================================================
+
+EMAIL_HOST = config(
+    "EMAIL_HOST",
+    default=""
+)
+
+if EMAIL_HOST:
+    EMAIL_BACKEND = (
+        "django.core.mail.backends.smtp.EmailBackend"
+    )
+else:
+    EMAIL_BACKEND = (
+        "django.core.mail.backends.console.EmailBackend"
+    )
+
+EMAIL_PORT = config(
+    "EMAIL_PORT",
+    default=587,
+    cast=int
+)
+
+EMAIL_USE_TLS = config(
+    "EMAIL_USE_TLS",
+    default=(EMAIL_PORT != 465),
+    cast=bool
+)
+
+EMAIL_USE_SSL = config(
+    "EMAIL_USE_SSL",
+    default=(EMAIL_PORT == 465),
+    cast=bool
+)
+
+EMAIL_HOST_USER = config(
+    "EMAIL_HOST_USER",
+    default=""
+)
+
+EMAIL_HOST_PASSWORD = config(
+    "EMAIL_HOST_PASSWORD",
+    default=""
+)
+
+DEFAULT_FROM_EMAIL = config(
+    "DEFAULT_FROM_EMAIL",
+    default=EMAIL_HOST_USER or "noreply@example.gov.az"
+)
+
+# ==========================================================================
+# CORS
+# ==========================================================================
+
+FRONTEND_ORIGIN = config(
+    "FRONTEND_ORIGIN",
+    default="http://localhost:3000"
+)
+
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_ORIGIN,
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
-# --------------------------------------------------------------------------
-# Cookie / CSRF / Session tehlukesizliyi
-# --------------------------------------------------------------------------
+# ==========================================================================
+# CSRF
+# ==========================================================================
+
+# Əsas problem burada idi.
+#
+# Admin:
+# http://192.168.1.200/admin/
+#
+# üçün Django bu origin-i etibarlı CSRF origin kimi tanımalıdır.
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://192.168.1.200",
+    FRONTEND_ORIGIN,
+]
+
+# ==========================================================================
+# SESSION / CSRF COOKIE
+# ==========================================================================
+
 SESSION_COOKIE_HTTPONLY = True
+
 SESSION_COOKIE_SAMESITE = "Strict"
-CSRF_COOKIE_HTTPONLY = False  # frontend JS-in CSRF tokenini oxuya bilmesi ucun False qalmalidir
+
+# Frontend JS CSRF tokenini oxuya bilsin deyə False
+CSRF_COOKIE_HTTPONLY = False
+
 CSRF_COOKIE_SAMESITE = "Strict"
 
+# ==========================================================================
+# HTTPS / SECURITY
+# ==========================================================================
+
+SECURE_SSL_REDIRECT = config(
+    "SECURE_SSL_REDIRECT",
+    default=False,
+    cast=bool
+)
+
+# Əgər Nginx HTTPS proxy kimi işləyirsə istifadə olunur.
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https"
+)
+
+# ==========================================================================
+# PRODUCTION SECURITY
+# ==========================================================================
+
 if DJANGO_ENV == "production":
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    # Əgər serverə HTTP ilə:
+    #
+    # http://192.168.1.200
+    #
+    # daxil olursansa, bunlar False qalmalıdır.
+    #
+    # HTTPS tam qurulduqdan sonra True etmək olar.
+
+    SESSION_COOKIE_SECURE = False
+
+    CSRF_COOKIE_SECURE = False
+
+    SECURE_HSTS_SECONDS = 0
+
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+
+    SECURE_HSTS_PRELOAD = False
+
     SECURE_CONTENT_TYPE_NOSNIFF = True
+
     SECURE_BROWSER_XSS_FILTER = True
+
     X_FRAME_OPTIONS = "DENY"
+
     SECURE_REFERRER_POLICY = "same-origin"
 
-SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=(DJANGO_ENV == "production"), cast=bool)
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# ==========================================================================
+# INTERNATIONALIZATION
+# ==========================================================================
 
-# --------------------------------------------------------------------------
-# Beynelxalqlashdirma
-# --------------------------------------------------------------------------
 LANGUAGE_CODE = "az"
+
 TIME_ZONE = "Asia/Baku"
+
 USE_I18N = True
+
 USE_TZ = True
 
+# ==========================================================================
+# STATIC / MEDIA
+# ==========================================================================
+
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
 MEDIA_URL = "media/"
+
 MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Fayl yükləmə həddi (icazə sənədi faylları üçün) - field_schema.py-dəki max_size_mb ilə uyğun
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+# ==========================================================================
+# FILE UPLOAD
+# ==========================================================================
 
-# --------------------------------------------------------------------------
-# Jazzmin - admin panel görünüşü
-# --------------------------------------------------------------------------
+DATA_UPLOAD_MAX_MEMORY_SIZE = (
+        20 * 1024 * 1024
+)
+
+# ==========================================================================
+# JAZZMIN
+# ==========================================================================
+
 JAZZMIN_SETTINGS = {
-    "site_title": "MSN İnzibatçı Paneli",
-    "site_header": "MSN İdarəetmə",
-    "site_brand": "MSN Admin",
-    "welcome_sign": "MSN İnzibatçı panelinə xoş gəldiniz",
-    "copyright": "Azərbaycan Respublikasının Müdafiə Sənayesi Nazirliyi",
-    "search_model": ["authentication.User", "organizations.Organization", "permissions_module.Module"],
+
+    "site_title":
+        "MSN İnzibatçı Paneli",
+
+    "site_header":
+        "MSN İdarəetmə",
+
+    "site_brand":
+        "MSN Admin",
+
+    "welcome_sign":
+        "MSN İnzibatçı panelinə xoş gəldiniz",
+
+    "copyright":
+        "Azərbaycan Respublikasının Müdafiə Sənayesi Nazirliyi",
+
+    "search_model": [
+        "authentication.User",
+        "organizations.Organization",
+        "permissions_module.Module",
+    ],
+
     "user_avatar": None,
 
     "topmenu_links": [
-        {"name": "Sayt", "url": "/", "new_window": True},
-        {"model": "authentication.User"},
-        {"app": "permissions_module"},
+        {
+            "name": "Sayt",
+            "url": "/",
+            "new_window": True
+        },
+
+        {
+            "model":
+                "authentication.User"
+        },
+
+        {
+            "app":
+                "permissions_module"
+        },
     ],
 
     "show_sidebar": True,
+
     "navigation_expanded": True,
+
     "hide_apps": [],
+
     "hide_models": [],
+
     "order_with_respect_to": [
-        "authentication", "organizations", "permissions_module", "audit",
+        "authentication",
+        "organizations",
+        "permissions_module",
+        "audit",
     ],
 
     "icons": {
-        "auth": "fas fa-users-cog",
-        "authentication.User": "fas fa-user",
-        "authentication.PasswordResetCode": "fas fa-key",
-        "organizations.Organization": "fas fa-building",
-        "organizations.AuthorizedPerson": "fas fa-id-badge",
-        "permissions_module.Module": "fas fa-sitemap",
-        "permissions_module.UserModulePermission": "fas fa-user-shield",
-        "audit.AuditLog": "fas fa-history",
+
+        "auth":
+            "fas fa-users-cog",
+
+        "authentication.User":
+            "fas fa-user",
+
+        "authentication.PasswordResetCode":
+            "fas fa-key",
+
+        "organizations.Organization":
+            "fas fa-building",
+
+        "organizations.AuthorizedPerson":
+            "fas fa-id-badge",
+
+        "permissions_module.Module":
+            "fas fa-sitemap",
+
+        "permissions_module.UserModulePermission":
+            "fas fa-user-shield",
+
+        "audit.AuditLog":
+            "fas fa-history",
     },
-    "default_icon_parents": "fas fa-chevron-circle-right",
-    "default_icon_children": "fas fa-circle",
 
-    "related_modal_active": True,
-    "custom_css": None,
-    "custom_js": None,
-    "use_google_fonts_cdn": True,
-    "show_ui_builder": False,
+    "default_icon_parents":
+        "fas fa-chevron-circle-right",
 
-    "changeform_format": "horizontal_tabs",
+    "default_icon_children":
+        "fas fa-circle",
+
+    "related_modal_active":
+        True,
+
+    "custom_css":
+        None,
+
+    "custom_js":
+        None,
+
+    "use_google_fonts_cdn":
+        True,
+
+    "show_ui_builder":
+        False,
+
+    "changeform_format":
+        "horizontal_tabs",
+
     "changeform_format_overrides": {
-        "authentication.User": "collapsible",
-        "permissions_module.Module": "collapsible",
+
+        "authentication.User":
+            "collapsible",
+
+        "permissions_module.Module":
+            "collapsible",
     },
 }
+
+# ==========================================================================
+# JAZZMIN UI
+# ==========================================================================
 
 JAZZMIN_UI_TWEAKS = {
-    "navbar_small_text": False,
-    "footer_small_text": False,
-    "body_small_text": False,
-    "brand_small_text": False,
-    "brand_colour": "navbar-navy",
-    "accent": "accent-navy",
-    "navbar": "navbar-navy navbar-dark",
-    "no_navbar_border": False,
-    "navbar_fixed": True,
-    "layout_boxed": False,
-    "footer_fixed": False,
-    "sidebar_fixed": True,
-    "sidebar": "sidebar-dark-navy",
-    "sidebar_nav_small_text": False,
-    "sidebar_disable_expand": False,
-    "sidebar_nav_child_indent": True,
-    "sidebar_nav_compact_style": False,
-    "sidebar_nav_legacy_style": False,
-    "sidebar_nav_flat_style": False,
-    "theme": "default",
-    "dark_mode_theme": None,
+
+    "navbar_small_text":
+        False,
+
+    "footer_small_text":
+        False,
+
+    "body_small_text":
+        False,
+
+    "brand_small_text":
+        False,
+
+    "brand_colour":
+        "navbar-navy",
+
+    "accent":
+        "accent-navy",
+
+    "navbar":
+        "navbar-navy navbar-dark",
+
+    "no_navbar_border":
+        False,
+
+    "navbar_fixed":
+        True,
+
+    "layout_boxed":
+        False,
+
+    "footer_fixed":
+        False,
+
+    "sidebar_fixed":
+        True,
+
+    "sidebar":
+        "sidebar-dark-navy",
+
+    "sidebar_nav_small_text":
+        False,
+
+    "sidebar_disable_expand":
+        False,
+
+    "sidebar_nav_child_indent":
+        True,
+
+    "sidebar_nav_compact_style":
+        False,
+
+    "sidebar_nav_legacy_style":
+        False,
+
+    "sidebar_nav_flat_style":
+        False,
+
+    "theme":
+        "default",
+
+    "dark_mode_theme":
+        None,
+
     "button_classes": {
-        "primary": "btn-navy",
-        "secondary": "btn-secondary",
-        "info": "btn-info",
-        "warning": "btn-warning",
-        "danger": "btn-danger",
-        "success": "btn-success",
+
+        "primary":
+            "btn-navy",
+
+        "secondary":
+            "btn-secondary",
+
+        "info":
+            "btn-info",
+
+        "warning":
+            "btn-warning",
+
+        "danger":
+            "btn-danger",
+
+        "success":
+            "btn-success",
     },
 }
 
-# --------------------------------------------------------------------------
-# Logging - butun autentifikasiya hadiseleri console/fayla yazilir
-# --------------------------------------------------------------------------
+# ==========================================================================
+# LOGGING
+# ==========================================================================
+
 LOGGING = {
+
     "version": 1,
-    "disable_existing_loggers": False,
+
+    "disable_existing_loggers":
+        False,
+
     "formatters": {
-        "verbose": {"format": "[{asctime}] {levelname} {name} - {message}", "style": "{"},
+
+        "verbose": {
+            "format":
+                "[{asctime}] {levelname} {name} - {message}",
+            "style": "{",
+        },
     },
+
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+
+        "console": {
+            "class":
+                "logging.StreamHandler",
+
+            "formatter":
+                "verbose",
+        },
     },
+
     "loggers": {
-        "security": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "django": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+
+        "security": {
+
+            "handlers": [
+                "console"
+            ],
+
+            "level":
+                "INFO",
+
+            "propagate":
+                False,
+        },
+
+        "django": {
+
+            "handlers": [
+                "console"
+            ],
+
+            "level":
+                "WARNING",
+
+            "propagate":
+                False,
+        },
     },
 }
