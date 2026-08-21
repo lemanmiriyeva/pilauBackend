@@ -10,7 +10,7 @@ import pyotp
 
 from organizations.permissions import IsStaffOrOrgAdmin, is_full_admin, scoped_organization_ids
 
-from .models import PasswordResetCode, User
+from .models import PasswordResetCode, TOTPResetCode, User
 from .serializers import (
     AdminResetTOTPSerializer,
     ChangePasswordSerializer,
@@ -20,6 +20,7 @@ from .serializers import (
     ForgotPasswordRequestSerializer,
     LoginSerializer,
     SelfProfileUpdateSerializer,
+    TOTPAdminHelpConfirmSerializer,
     TOTPRequestAdminHelpSerializer,
     TOTPSetupConfirmSerializer,
     TOTPVerifySerializer,
@@ -229,16 +230,17 @@ class TOTPVerifyView(APIView):
 
 
 GENERIC_TOTP_ADMIN_HELP_RESPONSE = {
-    "detail": "Tələbiniz qəbul edildi. Administratorlarınız məlumatlandırıldı."
+    "detail": "Əgər bu istifadəçi adı mövcuddursa, qeydiyyatdaki e-poçt ünvanına 2FA sıfırlama kodu göndərildi."
 }
 
 
 class TOTPRequestAdminHelpView(APIView):
     """
-    İstifadəçi 2FA cihazını itirdikdə (bax: AdminResetTOTPView qeydi - self-service bərpa
-    YOXDUR) bu endpoint vasitəsilə öz təşkilatının admini/sistem adminlərinə "2FA-nı sıfırla"
-    tələbi göndərə bilər. Girişsiz (temp_token/JWT olmadan) çağırılır, ona görə forgot-password
-    axını kimi həmişə eyni (generic) cavab qaytarır - istifadəçinin mövcudluğunu sızdırmır.
+    1-ci addım: İstifadəçi 2FA cihazını itirdikdə (bax: AdminResetTOTPView qeydi - istifadəçi
+    adminə müraciət etmədən sıfırlaya bilmirdi, indi e-poçt kodu ilə özü edə bilər) username
+    daxil edir, qeydiyyatdaki e-poçtuna 6 rəqəmli kod göndərilir. Girişsiz çağırılır, ona görə
+    forgot-password axını kimi həmişə eyni (generic) cavab qaytarır - istifadəçinin
+    mövcudluğunu sızdırmır.
     """
     permission_classes = [AllowAny]
     throttle_scope = "forgot_password"
@@ -247,32 +249,70 @@ class TOTPRequestAdminHelpView(APIView):
         serializer = TOTPRequestAdminHelpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         username = serializer.validated_data["username"]
-        message = serializer.validated_data["message"]
         ip = get_client_ip(request)
 
         user = User.objects.filter(username=username, is_active=True).first()
-        if user:
-            admins = User.objects.filter(
-                Q(is_staff=True) | Q(is_org_admin=True, organization=user.organization),
-                is_active=True,
-            ).exclude(id=user.id).exclude(email="")
-
-            body_lines = [
-                f"İstifadəçi {user.username} ({user.first_name} {user.last_name}) "
-                f"2FA (autentifikator) üçün admin köməyi tələb edir.",
-                "2FA-nı sıfırlamaq üçün İnzibatçı Panelindən istifadə edin.",
-            ]
-            if message:
-                body_lines.append(f"İstifadəçinin mesajı: {message}")
-
-            for admin in admins:
-                send_mail_to(admin.email, "2FA üçün admin köməyi tələbi", "\n".join(body_lines))
-
+        if user and not user.is_locked:
+            code = generate_numeric_code(6)
+            TOTPResetCode.objects.create(
+                user=user,
+                code_hash=hash_code(code),
+                expires_at=timezone.now() + timezone.timedelta(
+                    minutes=settings.PASSWORD_RESET_CODE_TTL_MINUTES
+                ),
+                requested_ip=ip,
+            )
+            send_mail_to(
+                user.email,
+                "2FA sıfırlama kodu",
+                f"İki mərhələli doğrulamanı (2FA) sıfırlamaq üçün kod: {code}\n"
+                f"Kod {settings.PASSWORD_RESET_CODE_TTL_MINUTES} dəqiqə etibarlıdır.\n"
+                f"Bu tələbi siz etməmisinizsə, bu mesajı gözardı edin.",
+            )
             log_security_event("TOTP_ADMIN_HELP_REQUESTED", user=user, ip=ip)
         else:
             log_security_event("TOTP_ADMIN_HELP_REQUESTED_INVALID", ip=ip, extra=f"username={username}")
 
         return Response(GENERIC_TOTP_ADMIN_HELP_RESPONSE)
+
+
+class TOTPAdminHelpConfirmView(APIView):
+    """2-ci addım: eyni username + e-poçta gələn kod. Kod doğrudursa 2FA sıfırlanır -
+    istifadəçi növbəti girişdə yenidən QR quracaq (bax: User.reset_totp)."""
+    permission_classes = [AllowAny]
+    throttle_scope = "forgot_password"
+
+    def post(self, request):
+        serializer = TOTPAdminHelpConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        ip = get_client_ip(request)
+
+        user = User.objects.filter(username=data["username"], is_active=True).first()
+        if not user:
+            return Response({"detail": "Kod yanlış və ya vaxtı bitib."}, status=400)
+
+        reset = (
+            TOTPResetCode.objects.filter(user=user, used=False)
+            .order_by("-created_at")
+            .first()
+        )
+        if not reset or not reset.is_valid() or reset.code_hash != hash_code(data["code"]):
+            log_security_event("TOTP_ADMIN_HELP_CODE_INVALID", user=user, ip=ip)
+            return Response({"detail": "Kod yanlış və ya vaxtı bitib."}, status=400)
+
+        user.reset_totp()
+        reset.used = True
+        reset.save(update_fields=["used"])
+
+        log_security_event("TOTP_ADMIN_HELP_RESET_SUCCESS", user=user, ip=ip)
+        send_mail_to(
+            user.email, "2FA sıfırlandı",
+            "İki mərhələli doğrulama (2FA) parametrləriniz sıfırlandı. Növbəti daxil "
+            "olduğunuzda yenidən quracaqsınız. Bu siz deyildinizsə, dərhal administrator "
+            "ilə əlaqə saxlayın.",
+        )
+        return Response({"detail": "2FA uğurla sıfırlandı. İndi yenidən daxil ola bilərsiniz."})
 
 
 class LogoutView(APIView):

@@ -99,3 +99,23 @@ class PasswordResetCode(models.Model):
     def is_valid(self) -> bool:
         from django.utils import timezone
         return not self.used and self.expires_at > timezone.now()
+
+
+class TOTPResetCode(models.Model):
+    """İstifadəçi 2FA cihazını itirdikdə, avtorizasiyasız (login-ə qədər) - yalnız
+    e-poçtuna gələn kodla - 2FA-nı sıfırlaması üçün. Bax: TOTPRequestAdminHelpView,
+    TOTPAdminHelpConfirmView (authentication/views.py)."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_reset_codes")
+    code_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    requested_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "2FA sıfırlama kodu"
+        verbose_name_plural = "2FA sıfırlama kodları"
+
+    def is_valid(self) -> bool:
+        from django.utils import timezone
+        return not self.used and self.expires_at > timezone.now()

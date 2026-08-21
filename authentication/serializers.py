@@ -160,10 +160,16 @@ class AdminResetTOTPSerializer(serializers.Serializer):
 
 
 class TOTPRequestAdminHelpSerializer(serializers.Serializer):
-    """2FA cihazini itirmis istifadeci - self-service bərpa olmadigi ucun,
-    qurumunun/sistemin adminlərinə kömək tələbi göndərmək üçün (bax: TOTPRequestAdminHelpView)."""
+    """2FA cihazini itirmis istifadeci - self-service bərpa üçün 1-ci addim:
+    username ilə e-poçtuna sıfırlama kodu göndərilir (bax: TOTPRequestAdminHelpView)."""
     username = serializers.CharField()
-    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class TOTPAdminHelpConfirmSerializer(serializers.Serializer):
+    """2-ci addim: eyni username + e-poçta gələn kod. Kod doğrudursa 2FA sıfırlanır,
+    istifadəçi növbəti girişdə yenidən QR quracaq (bax: TOTPAdminHelpConfirmView)."""
+    username = serializers.CharField()
+    code = serializers.CharField(max_length=6)
 
 
 class UnlockUserSerializer(serializers.Serializer):
