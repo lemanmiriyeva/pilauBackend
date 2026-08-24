@@ -17,16 +17,42 @@ class User(AbstractUser):
     # QEYD: bu iki sahə serializers.py-də (UserSerializer, SelfProfileUpdateSerializer və s.)
     # artıq istifadə olunurdu, amma modeldə yox idi - bu, /api/auth/me/ və bir çox istifadəçi
     # endpoint-ini "field department is not defined on model" xətası ilə sındırırdı. Bərpa edildi.
-    department = models.CharField("Departament/Şöbə", max_length=255, blank=True)
-    position = models.CharField("Vəzifə", max_length=255, blank=True)
-    organization = models.ForeignKey(
-        "organizations.Organization", null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="users",
-    )
+  
     # Qurum admini: is_staff (MSN inzibatçısı) olmadan, yalnız öz təşkilatı (+ alt-təşkilatları)
     # daxilində - Lisenziya/icazə sənədləri, Təşkilatlar və İstifadəçilər modullarında - tam
     # görünürlük və redaktə icazəsi verir. Bax: organizations/permissions.py, licenses/views.py,
     # authentication/views.py (UserListView, UserAdminDetailView).
+
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+
+    department = models.ForeignKey(
+        "organizations.OrganizationDepartment",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+
+    position = models.ForeignKey(
+        "organizations.OrganizationPosition",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+    )
+
+    birth_date = models.DateField(
+        "Doğum tarixi",
+        null=True,
+        blank=True,
+    )
+
     is_org_admin = models.BooleanField("Qurum admini", default=False)
 
     # --- İlk giriş - admin tərəfindən yaradılan hər istifadəçi ilk dəfə daxil olduqda

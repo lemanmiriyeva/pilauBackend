@@ -85,10 +85,25 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "first_name", "last_name", "username", "email", "phone",
-            "organization", "organization_detail", "fin_kod", "id_card_serial",
-            "department", "position", "is_org_admin", "is_staff",
-            "is_active", "is_locked", "totp_confirmed", "date_joined",
+            "id",
+            "first_name",
+            "last_name",
+            "username",
+            "email",
+            "phone",
+            "organization",
+            "organization_detail",
+            "department",
+            "position",
+            "birth_date",
+            "fin_kod",
+            "id_card_serial",
+            "is_org_admin",
+            "is_staff",
+            "is_active",
+            "is_locked",
+            "totp_confirmed",
+            "date_joined",
         ]
         read_only_fields = ["id", "is_org_admin", "is_staff", "is_locked", "totp_confirmed", "date_joined"]
 
@@ -101,9 +116,24 @@ class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "full_name", "first_name", "last_name", "username", "email", "phone",
-            "organization", "organization_name", "fin_kod", "id_card_serial", "is_org_admin",
-            "is_active", "is_locked", "date_joined",
+            "id",
+            "full_name",
+            "first_name",
+            "last_name",
+            "username",
+            "email",
+            "phone",
+            "organization",
+            "organization_name",
+            "department",
+            "position",
+            "birth_date",
+            "fin_kod",
+            "id_card_serial",
+            "is_org_admin",
+            "is_active",
+            "is_locked",
+            "date_joined",
         ]
 
     def get_full_name(self, obj):
@@ -124,14 +154,46 @@ class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "first_name", "last_name", "username", "email", "phone",
-            "organization", "fin_kod", "id_card_serial", "is_org_admin", "password", "modules",
+            "id",
+            "first_name",
+            "last_name",
+            "username",
+            "email",
+            "phone",
+            "organization",
+            "department",
+            "position",
+            "birth_date",
+            "fin_kod",
+            "id_card_serial",
+            "is_org_admin",
+            "password",
+            "modules",
         ]
 
     def validate_password(self, value):
         if value:
             validate_password(value)
         return value
+
+    def validate(self, attrs):
+        organization = attrs.get("organization")
+        department = attrs.get("department")
+        position = attrs.get("position")
+
+        if department and organization:
+            if department.organization_id != organization.id:
+                raise serializers.ValidationError({
+                    "department": "Departament seçilmiş quruma aid deyil."
+                })
+
+        if position and organization:
+            if position.organization_id != organization.id:
+                raise serializers.ValidationError({
+                    "position": "Vəzifə seçilmiş quruma aid deyil."
+                })
+
+        return attrs
 
 
 class UserAdminUpdateSerializer(serializers.ModelSerializer):
@@ -146,13 +208,46 @@ class UserAdminUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "first_name", "last_name", "email", "phone", "organization",
-            "fin_kod", "id_card_serial", "is_org_admin", "is_active",
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "organization",
+            "department",
+            "position",
+            "birth_date",
+            "fin_kod",
+            "id_card_serial",
+            "is_org_admin",
+            "is_active",
         ]
         extra_kwargs = {field: {"required": False} for field in [
             "first_name", "last_name", "email", "phone", "organization",
             "fin_kod", "id_card_serial", "is_org_admin", "is_active",
         ]}
+
+    def validate(self, attrs):
+        organization = attrs.get(
+            "organization",
+            self.instance.organization if self.instance else None
+        )
+
+        department = attrs.get("department")
+        position = attrs.get("position")
+
+        if department and organization:
+            if department.organization_id != organization.id:
+                raise serializers.ValidationError({
+                    "department": "Departament seçilmiş quruma aid deyil."
+                })
+
+        if position and organization:
+            if position.organization_id != organization.id:
+                raise serializers.ValidationError({
+                    "position": "Vəzifə seçilmiş quruma aid deyil."
+                })
+
+        return attrs
 
 
 class AdminResetTOTPSerializer(serializers.Serializer):

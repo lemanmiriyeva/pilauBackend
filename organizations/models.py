@@ -82,3 +82,35 @@ class AuthorizedPerson(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.organization.full_name})"
+
+
+class OrganizationDepartment(models.Model):
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="departments",
+    )
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ("organization", "name")
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationPosition(models.Model):
+    organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.CASCADE,
+        related_name="positions",
+    )
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ("organization", "name")
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name

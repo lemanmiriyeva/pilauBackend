@@ -514,7 +514,15 @@ class UserListView(generics.ListAPIView):
     serializer_class = UserListSerializer
 
     def get_queryset(self):
-        qs = User.objects.select_related("organization").order_by("first_name", "last_name", "username")
+        qs = User.objects.select_related(
+            "organization",
+            "department",
+            "position",
+        ).order_by(
+            "first_name",
+            "last_name",
+            "username"
+        )
         organization_id = self.request.query_params.get("organization")
         search = self.request.query_params.get("search")
         if organization_id:
@@ -535,7 +543,11 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        return User.objects.select_related("organization")
+        return User.objects.select_related(
+            "organization",
+            "department",
+            "position",
+        )
 
     def get_serializer_class(self):
         if self.request.method in ("PATCH", "PUT"):

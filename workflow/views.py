@@ -8,8 +8,10 @@ from licenses.field_schema import DOC_TYPES
 from organizations.models import Organization
 from organizations.permissions import is_full_admin, is_org_admin, scoped_organization_ids
 
-from workflow.models import ApproverPermission, DocumentWorkflowConfig, Notification, OrgReviewerPermission
-from workflow.serializers import NotificationSerializer, PermissionToggleSerializer, WorkflowConfigUpdateSerializer
+from workflow.models import ApproverPermission, DocumentWorkflowConfig, Notification, OrgReviewerPermission, OrgStage2Setting
+from workflow.serializers import NotificationSerializer, OrgStage2SettingToggleSerializer, PermissionToggleSerializer, WorkflowConfigUpdateSerializer
+from authentication.models import User
+from organizations.models import Organization
 
 DOC_TYPES_PAYLOAD = [{"key": key, "label": label} for key, label in DOC_TYPES]
 
@@ -27,6 +29,35 @@ def _user_row(user, permissions_by_user, doc_type_keys):
     }
 
 
+def _resolve_organization_for_org_admin_screen(request):
+    """Qurum admini üçün öz təşkilatını, Nazirlik admini üçün ?organization= parametrini həll
+    edir. Stage1PermissionsView və OrgStage2SettingsView eyni qaydanı paylaşır."""
+    requested_id = request.query_params.get("organization") or request.data.get("organization")
+    user = request.user
+
+    if is_full_admin(user):
+        if not requested_id:
+            return None, Response(
+                {"detail": "Nazirlik admini üçün 'organization' parametri məcburidir."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return get_object_or_404(Organization, pk=requested_id), None
+
+    if not is_org_admin(user):
+        return None, Response(
+            {"detail": "Bu əməliyyat yalnız qurum adminləri üçündür."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if not user.organization_id:
+        return None, Response({"detail": "İstifadəçinin təşkilatı təyin olunmayıb."}, status=400)
+    if requested_id and str(requested_id) != str(user.organization_id):
+        return None, Response(
+            {"detail": "Yalnız öz təşkilatınızın icazələrini idarə edə bilərsiniz."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return user.organization, None
+
+
 class Stage1PermissionsView(APIView):
     """1-ci mərhələ - Qurum yoxlaması icazələri.
 
@@ -35,36 +66,16 @@ class Stage1PermissionsView(APIView):
           təşkilat göndərsə 403 (yalnız öz təşkilatına baxa bilər).
         - Nazirlik admini (staff/superuser): istənilən 'organization' göndərə bilər (məcburidir).
     POST eyni body: {"organization": <id>, "user": <id>, "doc_type": "istehsal", "value": true}
-        - Tək bir icazə sətrini yaradır/yeniləyir (checkbox toggle).
+        - Tək bir icazə sətrini yaradır/yeniləyir (checkbox toggle). Multi-select effekti
+          frontend-də hər istifadəçi/kateqoriya kəsişməsi üçün ayrı-ayrı bu endpoint-i çağırmaqla
+          yaranır (bax PermissionGrid komponenti) - bir təşkilatda istənilən sayda istifadəçi
+          eyni kateqoriya üzrə işarələnə bilər.
     """
     permission_classes = [permissions.IsAuthenticated]
     doc_type_keys = [k for k, _ in DOC_TYPES]
 
     def _resolve_organization(self, request):
-        requested_id = request.query_params.get("organization") or request.data.get("organization")
-        user = request.user
-
-        if is_full_admin(user):
-            if not requested_id:
-                return None, Response(
-                    {"detail": "Nazirlik admini üçün 'organization' parametri məcburidir."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            return get_object_or_404(Organization, pk=requested_id), None
-
-        if not is_org_admin(user):
-            return None, Response(
-                {"detail": "Bu əməliyyat yalnız qurum adminləri üçündür."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if not user.organization_id:
-            return None, Response({"detail": "İstifadəçinin təşkilatı təyin olunmayıb."}, status=400)
-        if requested_id and str(requested_id) != str(user.organization_id):
-            return None, Response(
-                {"detail": "Yalnız öz təşkilatınızın icazələrini idarə edə bilərsiniz."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        return user.organization, None
+        return _resolve_organization_for_org_admin_screen(request)
 
     def get(self, request):
         organization, error = self._resolve_organization(request)
@@ -188,6 +199,104 @@ def _eligible_msn_users(doc_type):
     ]
 
 
+class Stage1OrganizationUsersView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        organization_id = request.query_params.get("organization_id")
+        doc_type = request.query_params.get("doc_type")
+
+        if not organization_id:
+            return Response(
+                {"detail": "organization_id tələb olunur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not doc_type:
+            return Response(
+                {"detail": "doc_type tələb olunur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            organization = Organization.objects.get(
+                id=organization_id
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Qurum tapılmadı."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Qurumun istifadəçiləri
+        users = User.objects.filter(
+            organization=organization,
+            is_active=True,
+        ).select_related(
+            "department",
+            "position",
+        )
+
+        # Qurum adminləri
+        org_admins = users.filter(
+            is_org_admin=True
+        )
+
+        # Həmin doc_type üzrə təsdiq hüququ olanlar
+        approver_user_ids = ApproverPermission.objects.filter(
+            organization=organization,
+            doc_type=doc_type,
+            value=True,
+        ).values_list(
+            "user_id",
+            flat=True,
+        )
+
+        approvers = users.filter(
+            id__in=approver_user_ids
+        )
+
+        # Bir user həm admin, həm approver ola bilər.
+        user_map = {}
+
+        for user in org_admins:
+            user_map[user.id] = user
+
+        for user in approvers:
+            user_map[user.id] = user
+
+        result = []
+
+        for user in user_map.values():
+            result.append({
+                "id": user.id,
+                "full_name": (
+                    f"{user.first_name} {user.last_name}".strip()
+                    or user.username
+                ),
+                "username": user.username,
+                "is_org_admin": user.is_org_admin,
+                "department": (
+                    user.department.name
+                    if user.department
+                    else ""
+                ),
+                "position": (
+                    user.position.name
+                    if user.position
+                    else ""
+                ),
+            })
+
+        result.sort(
+            key=lambda x: (
+                not x["is_org_admin"],
+                x["full_name"].lower(),
+            )
+        )
+
+        return Response(result)
+
 class WorkflowConfigView(APIView):
     """Sənəd növü üzrə mərhələli təsdiq axınının marşrutlanması (1-ci mərhələ: Qurum/MSN,
     2-ci mərhələ: həmişə MSN). Yalnız Nazirlik admini görə/dəyişə bilər.
@@ -218,6 +327,9 @@ class WorkflowConfigView(APIView):
                 "stage2_enabled": config.stage2_enabled if config else True,
                 "stage2_user": config.stage2_user_id if config else None,
                 "eligible_users": _eligible_msn_users(key),
+                "stage1_users": list(
+                    config.stage1_users.values_list("id", flat=True)
+                ) if config else [],
             })
         return Response(rows)
 
@@ -243,16 +355,23 @@ class WorkflowConfigView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        config, _ = DocumentWorkflowConfig.objects.update_or_create(
+        stage1_users = data.get("stage1_users", [])
+
+        config, created = DocumentWorkflowConfig.objects.update_or_create(
             doc_type=data["doc_type"],
             defaults={
                 "stage1_mode": data["stage1_mode"],
-                "stage1_user_id": data.get("stage1_user") if data["stage1_mode"] == "msn" else None,
+                "stage1_user_id": data.get("stage1_user"),
                 "stage2_enabled": data.get("stage2_enabled", True),
                 "stage2_user_id": data.get("stage2_user"),
                 "updated_by": request.user,
             },
         )
+
+        if data["stage1_mode"] == "qurum":
+            config.stage1_users.set(stage1_users)
+        else:
+            config.stage1_users.clear()
         return Response({
             "doc_type": config.doc_type,
             "stage1_mode": config.stage1_mode,
@@ -260,6 +379,48 @@ class WorkflowConfigView(APIView):
             "stage2_enabled": config.stage2_enabled,
             "stage2_user": config.stage2_user_id,
         })
+
+
+class OrgStage2SettingsView(APIView):
+    """Qurum admininin öz təşkilatı üçün, hər lisenziya kateqoriyasında 2-ci mərhələni (MSN son
+    təsdiqi) söndürüb-söndürməyəcəyini idarə etdiyi ekran (bax OrgStage2Setting modeli və
+    PermitDocument.approve_stage - buradakı dəyər həqiqətən təsdiq axınına təsir edir).
+
+    GET  /api/workflow/stage2-settings/?organization=<id>
+        Cavab: {"doc_types": [...], "settings": {"istehsal": true, ...}}
+        settings[doc_type] = True o deməkdir ki, 2-ci mərhələ (MSN) SÖNDÜRÜLÜB (skip_stage2=True).
+    POST {"organization": <id>, "doc_type": "istehsal", "skip_stage2": true}
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        organization, error = _resolve_organization_for_org_admin_screen(request)
+        if error:
+            return error
+
+        rows = OrgStage2Setting.objects.filter(organization=organization, skip_stage2=True)
+        settings_map = {row.doc_type: True for row in rows}
+
+        return Response({
+            "organization": {"id": organization.id, "full_name": organization.full_name},
+            "doc_types": DOC_TYPES_PAYLOAD,
+            "settings": settings_map,
+        })
+
+    def post(self, request):
+        organization, error = _resolve_organization_for_org_admin_screen(request)
+        if error:
+            return error
+
+        serializer = OrgStage2SettingToggleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        OrgStage2Setting.objects.update_or_create(
+            organization=organization, doc_type=data["doc_type"],
+            defaults={"skip_stage2": data["skip_stage2"], "updated_by": request.user},
+        )
+        return Response({"detail": "Yadda saxlanıldı."})
 
 
 class NotificationListView(APIView):

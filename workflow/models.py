@@ -121,14 +121,28 @@ class DocumentWorkflowConfig(models.Model):
     doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES, unique=True)
     stage1_mode = models.CharField("1-ci mərhələ", max_length=10, choices=STAGE1_CHOICES, default="qurum")
     stage1_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="+",
-        verbose_name="1-ci mərhələ icraçısı (MSN seçildikdə)",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="1-ci mərhələ icraçısı",
+    )
+
+    stage1_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="workflow_stage1_configs",
+        verbose_name="1-ci mərhələ təsdiqçiləri",
     )
     stage2_user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="+",
         verbose_name="2-ci mərhələ icraçısı (MSN)",
+    )
+    stage2_enabled = models.BooleanField(
+        "2-ci mərhələ aktivdir",
+        default=True,
     )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
