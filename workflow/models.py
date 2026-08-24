@@ -54,6 +54,27 @@ class OrgReviewerPermission(models.Model):
     def __str__(self):
         return f"{self.user} · {self.get_doc_type_display()} · {'✓' if self.can_review else '—'}"
 
+    @classmethod
+    def eligible_user_ids(cls, organization_id, doc_type) -> set:
+        """1-ci mərhələdə ('qurum' rejimi) bu təşkilatın bu kateqoriya üzrə sənədini kimlər
+        yoxlaya/təsdiqləyə bilər: təşkilatın admini(ləri) VƏ bu kateqoriya üçün açıq-aşkar
+        icazə verilmiş istənilən sayda istifadəçi. Nəticə TƏBİİ OLARAQ çoxlu (multiple) ola
+        bilər - 'qurum' rejimində sənədi TƏK bir sabit şəxsə deyil, bu siyahıdakı istənilən
+        şəxsə həvalə edir (kim əvvəl baxarsa)."""
+        from authentication.models import User
+
+        org_admin_ids = set(
+            User.objects.filter(
+                organization_id=organization_id, is_org_admin=True, is_active=True,
+            ).values_list("id", flat=True)
+        )
+        reviewer_ids = set(
+            cls.objects.filter(
+                organization_id=organization_id, doc_type=doc_type, can_review=True,
+            ).values_list("user_id", flat=True)
+        )
+        return org_admin_ids | reviewer_ids
+
 
 class ApproverPermission(models.Model):
     """2-ci mərhələ: Təsdiq icazəsi (Nazirlik tərəfi).
@@ -122,6 +143,45 @@ class DocumentWorkflowConfig(models.Model):
 
     def __str__(self):
         return f"{self.get_doc_type_display()} · 1-ci: {self.get_stage1_mode_display()} · 2-ci: MSN"
+
+
+class OrgStage2Setting(models.Model):
+    """Təşkilatın özü üçün, hər lisenziya kateqoriyası üzrə: MSN-in son (2-ci mərhələ)
+    təsdiqini keçmək istəyirmi? Bax 'Qurum yoxlaması icazələri' ekranı (yalnız qurum admini
+    özü, öz təşkilatı üçün dəyişə bilər - hər modul üçün ayrıca sətir/toggle).
+
+    skip_stage2=True olduqda: 1-ci mərhələ (qurum) təsdiqi kifayət edir - sənəd MSN-ə
+    göndərilmədən birbaşa 'aktiv' olur (bax PermitDocument.approve_stage)."""
+
+    organization = models.ForeignKey(
+        "organizations.Organization", on_delete=models.CASCADE, related_name="stage2_settings",
+    )
+    doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES)
+    skip_stage2 = models.BooleanField("MSN son təsdiqini keçir (2-ci mərhələ söndürülüb)", default=False)
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Təşkilat - 2-ci mərhələ tənzimləməsi"
+        verbose_name_plural = "Təşkilatlar - 2-ci mərhələ tənzimləmələri"
+        unique_together = ("organization", "doc_type")
+        ordering = ["organization_id", "doc_type"]
+
+    def __str__(self):
+        state = "MSN keçilir" if self.skip_stage2 else "MSN aktiv"
+        return f"{self.organization} · {self.get_doc_type_display()} · {state}"
+
+    @classmethod
+    def is_skipped(cls, organization_id, doc_type) -> bool:
+        if not organization_id:
+            return False
+        return cls.objects.filter(
+            organization_id=organization_id, doc_type=doc_type, skip_stage2=True,
+        ).exists()
 
 
 class Notification(models.Model):

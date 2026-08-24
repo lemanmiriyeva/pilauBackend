@@ -2,7 +2,7 @@ from django.db.models import Count
 from rest_framework import generics, permissions
 
 from .models import Organization
-from .permissions import IsStaffOrOrgAdminForWrite, scoped_organization_ids
+from .permissions import IsFullAdminForCreate, IsStaffOrOrgAdminForWrite, is_full_admin, scoped_organization_ids
 from .serializers import (
     OrganizationDetailSerializer,
     OrganizationListSerializer,
@@ -63,9 +63,10 @@ class OrganizationTableListView(generics.ListAPIView):
 
 class OrganizationListCreateView(generics.ListCreateAPIView):
     """Image 3 - 'Təşkilat yarat' formu bu endpoint-ə POST edir.
-    Yeni təşkilat yaratmaq yalnız staff/qurum adminindən qəbul olunur (bax: IsStaffOrOrgAdminForWrite);
-    siyahı isə hər authenticated istifadəçiyə öz əhatəsi daxilində açıqdır."""
-    permission_classes = [IsStaffOrOrgAdminForWrite]
+    Yeni təşkilat yaratmaq YALNIZ Nazirlik admininə (is_staff/is_superuser) açıqdır - qurum
+    admininin bu hüququ yoxdur (bax IsFullAdminForCreate); siyahı isə hər authenticated
+    istifadəçiyə öz əhatəsi daxilində açıqdır."""
+    permission_classes = [IsFullAdminForCreate]
     serializer_class = OrganizationDetailSerializer
 
     def get_queryset(self):
@@ -77,8 +78,12 @@ class OrganizationListCreateView(generics.ListCreateAPIView):
 
 
 class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Təşkilat detalı/redaktəsi. Qurum admini yalnız öz təşkilatı (+ alt-təşkilatları) daxilindəki
-    təşkilatları görə/redaktə edə bilər; silmək (DELETE) yalnız staff/superuser-ə açıqdır."""
+    """Təşkilat detalı/redaktəsi.
+
+    Nazirlik admini (is_staff/is_superuser) - bütün təşkilatları görür/redaktə edir/silir.
+    Qurum admini - görməsi öz təşkilatı + alt-təşkilatları daxilindədir (queryset), AMMA
+    redaktə (PATCH/PUT) YALNIZ məhz ÖZ təşkilatı (alt-təşkilatlar DAXİL DEYİL) üçündür - bax
+    check_object_permissions. Silmək (DELETE) yalnız staff/superuser-ə açıqdır."""
     permission_classes = [IsStaffOrOrgAdminForWrite]
     serializer_class = OrganizationDetailSerializer
 
@@ -89,8 +94,15 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
             qs = qs.filter(id__in=org_ids)
         return qs
 
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if request.method in ("PATCH", "PUT") and not is_full_admin(request.user):
+            if obj.id != request.user.organization_id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Yalnız öz təşkilatınızı redaktə edə bilərsiniz.")
+
     def delete(self, request, *args, **kwargs):
-        if not (request.user.is_staff or request.user.is_superuser):
+        if not is_full_admin(request.user):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Təşkilatı yalnız sistem administratoru silə bilər.")
         return super().delete(request, *args, **kwargs)

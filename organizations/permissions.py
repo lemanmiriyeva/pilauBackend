@@ -56,3 +56,18 @@ class IsStaffOrOrgAdminForWrite(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return bool(u.is_staff or u.is_superuser or is_org_admin(u))
+
+
+class IsFullAdminForCreate(BasePermission):
+    """Yeni təşkilat yaratmaq (POST) YALNIZ Nazirlik admininə (is_staff/is_superuser) açıqdır -
+    qurum admininin bu hüququ yoxdur (o, yalnız ÖZ təşkilatını redaktə edə bilər, bax
+    OrganizationDetailView). Siyahı (GET) hər authenticated istifadəçiyə açıqdır (queryset öz
+    əhatəsinə görə məhdudlaşdırılır, bax scoped_organization_ids)."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return is_full_admin(u)

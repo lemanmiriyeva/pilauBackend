@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 import pyotp
 
-from organizations.permissions import IsStaffOrOrgAdmin, is_full_admin, scoped_organization_ids
+from organizations.permissions import is_full_admin
 
 from .models import PasswordResetCode, TOTPResetCode, User
 from .serializers import (
@@ -505,16 +505,15 @@ class CreateUserView(APIView):
 class UserListView(generics.ListAPIView):
     """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2).
 
-    Staff/superuser bütün istifadəçiləri görür. Qurum admini (is_org_admin=True) yalnız öz
-    təşkilatı (+ alt-təşkilatları) daxilindəki istifadəçiləri görür."""
-    permission_classes = [IsStaffOrOrgAdmin]
+    YALNIZ Nazirlik admini (is_staff/is_superuser) - qurum admininin BURAYA girişi YOXDUR.
+    Qurum admininin öz təşkilatının işçilərinə ehtiyacı olan yeganə yer 'Qurum yoxlaması
+    icazələri' ekranıdır (bax workflow.views.Stage1PermissionsView) - o, tamamilə ayrı,
+    məhdud (yalnız ad/departament/mövcud icazələr) endpoint-dir, istifadəçi idarəetməsi deyil."""
+    permission_classes = [IsAdminUser]
     serializer_class = UserListSerializer
 
     def get_queryset(self):
         qs = User.objects.select_related("organization").order_by("first_name", "last_name", "username")
-        org_ids = scoped_organization_ids(self.request.user)
-        if org_ids is not None:
-            qs = qs.filter(organization_id__in=org_ids)
         organization_id = self.request.query_params.get("organization")
         search = self.request.query_params.get("search")
         if organization_id:
@@ -530,17 +529,12 @@ class UserListView(generics.ListAPIView):
 class UserAdminDetailView(generics.RetrieveUpdateAPIView):
     """İnzibatçı Paneli -> İstifadəçi redaktəsi və status (Aktiv/Deaktiv) dəyişimi (Image 2).
 
-    Qurum admini yalnız öz təşkilatındakı (+ alt-təşkilatlar) istifadəçilərə çata bilir (əhatədən
-    kənar id üçün 404 qayıdır) və onları redaktə edə bilir, lakin 'organization' və 'is_org_admin'
-    sahələrini dəyişə bilmir - bunları yalnız staff/superuser dəyişə bilər (aşağıdakı perform_update)."""
-    permission_classes = [IsStaffOrOrgAdmin]
+    YALNIZ Nazirlik admini (is_staff/is_superuser) - istifadəçi idarəetməsi artıq qurum
+    admininə açıq deyil (bax UserListView qeydi)."""
+    permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        qs = User.objects.select_related("organization")
-        org_ids = scoped_organization_ids(self.request.user)
-        if org_ids is not None:
-            qs = qs.filter(organization_id__in=org_ids)
-        return qs
+        return User.objects.select_related("organization")
 
     def get_serializer_class(self):
         if self.request.method in ("PATCH", "PUT"):
