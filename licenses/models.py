@@ -144,9 +144,11 @@ class PermitDocument(models.Model):
         Yaradılmış sənəd qeydini qaytarır (yalnız indicə 2-ci mərhələ təsdiqləndikdə), əks halda None.
 
         QEYD: 1-ci mərhələ təsdiqlənəndə, əgər təşkilat admini bu kateqoriya üçün 2-ci mərhələni
-        söndürübsə (bax workflow.models.OrgStage2Setting - 'Qurum yoxlaması icazələri' səhifəsi),
+        söndürübsə (bax workflow.models.OrgStage2Setting - 'Qurum yoxlaması icazələri' səhifəsi)
+        VƏ YA Nazirlik admini bu kateqoriya üçün 2-ci mərhələni ümumiyyətlə söndürübsə (bax
+        workflow.models.DocumentWorkflowConfig.stage2_enabled - 'Təsdiq axını' səhifəsi),
         sənəd MSN-ə getmədən birbaşa aktivləşir."""
-        from workflow.models import OrgStage2Setting
+        from workflow.models import DocumentWorkflowConfig, OrgStage2Setting
 
         now = timezone.now()
         certificate = None
@@ -155,7 +157,17 @@ class PermitDocument(models.Model):
             self.stage1_approved_at = now
             self.stage1_comment = comment
             self.approval_stage = 2
-            if OrgStage2Setting.is_skipped(self.organization_id, self.doc_type):
+
+            config = DocumentWorkflowConfig.objects.filter(doc_type=self.doc_type).first()
+            msn_stage2_disabled = bool(config and not config.stage2_enabled)
+
+            if msn_stage2_disabled:
+                self.status = "aktiv"
+                self.stage2_comment = (
+                    "2-ci mərhələ Nazirlik admini tərəfindən bu kateqoriya üçün söndürülüb - "
+                    "avtomatik keçildi."
+                )
+            elif OrgStage2Setting.is_skipped(self.organization_id, self.doc_type):
                 self.status = "aktiv"
                 self.stage2_comment = (
                     "2-ci mərhələ təşkilat admini tərəfindən bu kateqoriya üçün söndürülüb - "

@@ -491,6 +491,7 @@ class CreateUserView(APIView):
                 user=user, module=module,
                 defaults={
                     "can_view": bool(item.get("can_view", False)),
+                    "can_create": bool(item.get("can_create", False)),
                     "can_edit": bool(item.get("can_edit", False)),
                     "can_approve": bool(item.get("can_approve", False)),
                     "granted_by": request.user,

@@ -49,6 +49,7 @@ class UserModulePermission(models.Model):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name="user_permissions")
 
     can_view = models.BooleanField("Baxış", default=False)
+    can_create = models.BooleanField("Yaratma", default=False)
     can_edit = models.BooleanField("Redaktə", default=False)
     can_approve = models.BooleanField("Təsdiq", default=False)
 
@@ -69,11 +70,11 @@ class UserModulePermission(models.Model):
 
 
 def has_module_permission(user, module_id: int, action: str) -> bool:
-    """action: 'view' | 'edit' | 'approve'"""
+    """action: 'view' | 'create' | 'edit' | 'approve'"""
     if user.is_superuser:
         return True
     field = f"can_{action}"
-    if field not in {"can_view", "can_edit", "can_approve"}:
+    if field not in {"can_view", "can_create", "can_edit", "can_approve"}:
         raise ValueError("Yanlış action")
     return UserModulePermission.objects.filter(
         user=user, module_id=module_id, **{field: True}
@@ -89,10 +90,13 @@ def get_visible_module_tree(user):
         by_parent.setdefault(m.parent_id, []).append(m)
 
     if user.is_superuser:
-        permitted = {m.id: {"can_view": True, "can_edit": True, "can_approve": True} for m in all_modules}
+        permitted = {m.id: {"can_view": True, "can_create": True, "can_edit": True, "can_approve": True} for m in all_modules}
     else:
         permitted = {
-            p.module_id: {"can_view": p.can_view, "can_edit": p.can_edit, "can_approve": p.can_approve}
+            p.module_id: {
+                "can_view": p.can_view, "can_create": p.can_create,
+                "can_edit": p.can_edit, "can_approve": p.can_approve,
+            }
             for p in UserModulePermission.objects.filter(user=user)
         }
 
@@ -102,7 +106,7 @@ def get_visible_module_tree(user):
         return any(is_visible(c) for c in by_parent.get(module.id, []))
 
     def build(module):
-        perm = permitted.get(module.id, {"can_view": False, "can_edit": False, "can_approve": False})
+        perm = permitted.get(module.id, {"can_view": False, "can_create": False, "can_edit": False, "can_approve": False})
         return {
             "id": module.id,
             "key": module.key,
@@ -111,6 +115,7 @@ def get_visible_module_tree(user):
             "meta": module.meta,
             "icon": module.icon,
             "can_view": bool(perm.get("can_view")),
+            "can_create": bool(perm.get("can_create")),
             "can_edit": bool(perm.get("can_edit")),
             "can_approve": bool(perm.get("can_approve")),
             "children": [build(c) for c in by_parent.get(module.id, []) if is_visible(c)],

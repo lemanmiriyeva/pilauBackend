@@ -30,6 +30,7 @@ def _send_email_async(to_email: str, subject: str, body: str) -> None:
 
 def _stage1_recipients(document):
     from authentication.models import User
+    from workflow.models import OrgReviewerPermission
 
     config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
     stage1_mode = config.stage1_mode if config else "qurum"
@@ -37,13 +38,21 @@ def _stage1_recipients(document):
     if stage1_mode == "msn" and config and config.stage1_user_id and config.stage1_user.is_active:
         return [config.stage1_user]
 
-    if document.organization_id:
-        return list(
-            User.objects.filter(
-                organization_id=document.organization_id, is_org_admin=True, is_active=True,
-            )
-        )
-    return []
+    if not document.organization_id:
+        return []
+
+    # 'qurum' rejimi: təşkilatın həm admini, HƏM DƏ bu sənəd növü üzrə 'Qurum yoxlaması
+    # icazəsi' (OrgReviewerPermission) verilmiş bütün işçiləri bildirişi alır - tək bir nəfər
+    # (yalnız admin) yox, hamısı, ki, kimsə tətildə/məşğul olsa belə yoxlama gecikməsin.
+    org_admin_ids = User.objects.filter(
+        organization_id=document.organization_id, is_org_admin=True, is_active=True,
+    ).values_list("id", flat=True)
+    reviewer_ids = OrgReviewerPermission.objects.filter(
+        organization_id=document.organization_id, doc_type=document.doc_type, can_review=True,
+    ).values_list("user_id", flat=True)
+
+    recipient_ids = set(org_admin_ids) | set(reviewer_ids)
+    return list(User.objects.filter(id__in=recipient_ids, is_active=True))
 
 
 def notify_stage1_reviewers(document) -> None:

@@ -16,6 +16,7 @@ class WorkflowConfigUpdateSerializer(serializers.Serializer):
     doc_type = serializers.ChoiceField(choices=DOC_TYPES)
     stage1_mode = serializers.ChoiceField(choices=DocumentWorkflowConfig.STAGE1_CHOICES)
     stage1_user = serializers.IntegerField(required=False, allow_null=True)
+    stage2_enabled = serializers.BooleanField(required=False, default=True)
     stage2_user = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs):
@@ -23,9 +24,9 @@ class WorkflowConfigUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"stage1_user": "MSN seçildikdə 1-ci mərhələ üçün icraçı seçilməlidir."}
             )
-        if not attrs.get("stage2_user"):
+        if attrs.get("stage2_enabled", True) and not attrs.get("stage2_user"):
             raise serializers.ValidationError(
-                {"stage2_user": "2-ci mərhələ (MSN) üçün icraçı seçilməlidir."}
+                {"stage2_user": "2-ci mərhələ (MSN) aktiv olduqda icraçı seçilməlidir."}
             )
         return attrs
 

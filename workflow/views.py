@@ -193,12 +193,14 @@ class WorkflowConfigView(APIView):
     2-ci mərhələ: həmişə MSN). Yalnız Nazirlik admini görə/dəyişə bilər.
 
     GET  /api/workflow/workflow-config/
-        Bütün doc_type-lar üçün cari konfiqurasiyanı (yoxdursa defolt 'qurum') VƏ hər biri
-        üçün seçilə bilən MSN icraçılarının siyahısını (ApproverPermission-a əsasən) qaytarır.
+        Bütün doc_type-lar üçün cari konfiqurasiyanı (yoxdursa defolt 'qurum', stage2 aktiv)
+        VƏ hər biri üçün seçilə bilən MSN icraçılarının siyahısını (ApproverPermission-a
+        əsasən) qaytarır.
     PUT  /api/workflow/workflow-config/
         Body: {"doc_type": "istehsal", "stage1_mode": "qurum"|"msn",
-               "stage1_user": <id|null>, "stage2_user": <id>}
-        Tək bir doc_type-ın axınını yaradır/yeniləyir.
+               "stage1_user": <id|null>, "stage2_enabled": true|false, "stage2_user": <id|null>}
+        Tək bir doc_type-ın axınını yaradır/yeniləyir. stage2_enabled=false olduqda
+        stage2_user tələb olunmur (dəyər saxlanılır, sadəcə istifadə edilmir).
     """
     permission_classes = [permissions.IsAdminUser]
 
@@ -213,6 +215,7 @@ class WorkflowConfigView(APIView):
                 "label": label,
                 "stage1_mode": config.stage1_mode if config else "qurum",
                 "stage1_user": config.stage1_user_id if config else None,
+                "stage2_enabled": config.stage2_enabled if config else True,
                 "stage2_user": config.stage2_user_id if config else None,
                 "eligible_users": _eligible_msn_users(key),
             })
@@ -234,7 +237,7 @@ class WorkflowConfigView(APIView):
                 {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if data.get("stage2_user") not in eligible_ids:
+        if data.get("stage2_enabled", True) and data.get("stage2_user") not in eligible_ids:
             return Response(
                 {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -245,6 +248,7 @@ class WorkflowConfigView(APIView):
             defaults={
                 "stage1_mode": data["stage1_mode"],
                 "stage1_user_id": data.get("stage1_user") if data["stage1_mode"] == "msn" else None,
+                "stage2_enabled": data.get("stage2_enabled", True),
                 "stage2_user_id": data.get("stage2_user"),
                 "updated_by": request.user,
             },
@@ -253,6 +257,7 @@ class WorkflowConfigView(APIView):
             "doc_type": config.doc_type,
             "stage1_mode": config.stage1_mode,
             "stage1_user": config.stage1_user_id,
+            "stage2_enabled": config.stage2_enabled,
             "stage2_user": config.stage2_user_id,
         })
 

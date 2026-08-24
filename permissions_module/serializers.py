@@ -17,7 +17,7 @@ class UserModulePermissionSerializer(serializers.ModelSerializer):
         model = UserModulePermission
         fields = [
             "id", "user", "user_full_name", "module", "module_title",
-            "can_view", "can_edit", "can_approve",
+            "can_view", "can_create", "can_edit", "can_approve",
             "granted_by", "granted_at", "updated_at",
         ]
         read_only_fields = ["granted_by", "granted_at", "updated_at"]
@@ -31,7 +31,7 @@ class GrantPermissionsSerializer(serializers.Serializer):
     modules = serializers.ListField(child=serializers.DictField())
 
     def validate_modules(self, value):
-        # her element: {"module": <id>, "can_view": bool, "can_edit": bool, "can_approve": bool}
+        # her element: {"module": <id>, "can_view": bool, "can_create": bool, "can_edit": bool, "can_approve": bool}
         for item in value:
             if "module" not in item:
                 raise serializers.ValidationError("Hər modul üçün 'module' id-si tələb olunur.")

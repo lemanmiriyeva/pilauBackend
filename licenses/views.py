@@ -25,6 +25,34 @@ from workflow.notify import notify_certificate_ready, notify_stage1_reviewers, n
 
 FILE_FIELD_PREFIX = "file__"
 
+# doc_type (licenses.field_schema.DOC_TYPES açarı) -> permissions_module.Module.key.
+# İxrac və idxal eyni "idxal-ixrac" modulunun altındadır (bax seed_modules_shell.py).
+DOC_TYPE_MODULE_KEY = {
+    "ixrac": "idxal-ixrac",
+    "idxal": "idxal-ixrac",
+    "istehsal": "istehsal",
+    "xususi_satis": "xususi-satis",
+    "edv_guzest": "edv-guzesti",
+}
+
+
+def _can_create_doc_type(user, doc_type: str) -> bool:
+    """İstifadəçinin bu sənəd növü üçün 'Yaratma' (can_create) icazəsi olub-olmadığını yoxlayır.
+    Tam admin/qurum admini/istənilən mərhələdə təsdiq hüququ olanlar üçün məhdudiyyət yoxdur -
+    bu, yalnız 'İcazələr'də konkret modul üzrə açıq şəkildə can_create verilmiş adi işçilər
+    üçün əlavə maneədir (bax permissions_module - "hansı modulda create edə bilər")."""
+    if user.is_superuser or user.is_staff or getattr(user, "is_org_admin", False):
+        return True
+    from permissions_module.models import Module, has_module_permission
+
+    module_key = DOC_TYPE_MODULE_KEY.get(doc_type)
+    if not module_key:
+        return True
+    module = Module.objects.filter(key=module_key).first()
+    if not module:
+        return True
+    return has_module_permission(user, module.id, "create")
+
 
 def _workflow_configs():
     return {c.doc_type: c for c in DocumentWorkflowConfig.objects.all()}
@@ -88,21 +116,11 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
         if _user_is_any_approver(user):
             return qs
 
-        # Qurum admini -> öz qurumunun sertifikatları
-        if user.is_org_admin:
-            org_ids = scoped_organization_ids(user)
-
-            if org_ids is not None:
-                return qs.filter(
-                    permit_document__organization_id__in=org_ids
-                )
-
-            return qs.none()
-
-        # Adi user -> yalnız öz yaratdığı sənədlərdən yaranan sertifikatlar
-        return qs.filter(
-            permit_document__created_by=user
-        )
+        # 'Sənədlərim' - qurum admini olub-olmamasından asılı olmayaraq HƏR İSTİFADƏÇİ yalnız
+        # ÖZ yaratdığı sənədlərdən yaranan sertifikatları görür (təşkilatın digər sənədləri
+        # üçün bax PermitDocumentViewSet - istehsal/idxal-ixrac/xüsusi-satış/ƏDV-güzəşt
+        # siyahıları təşkilat üzrə geniş əhatəlidir, amma 'Sənədlərim' fərqli, şəxsi bir görünüşdür).
+        return qs.filter(permit_document__created_by=user)
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
@@ -262,18 +280,14 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
         elif _user_is_any_approver(user):
             pass
 
-        # 3. Qurum admini -> öz qurumunun sənədlərini görür
-        elif user.is_org_admin:
-            org_ids = scoped_organization_ids(user)
-
-            if org_ids is not None:
-                qs = qs.filter(organization_id__in=org_ids)
-            else:
-                qs = qs.none()
-
-        # 4. Adi user -> YALNIZ ÖZ YARATDIĞI sənədləri görür
+        # 3. Qurum admini VƏ adi işçi -> öz təşkilatına (VƏ alt-təşkilatlarına) məxsus bütün
+        # sənədləri görür - bura onların öz yaratdıqları sənədlər də daxildir, çünki öz
+        # sənədlərinin təşkilatı da eyni təşkilatdır. Fərqli olan yalnız 'Sənədlərim'
+        # (bax LicenseCertificateView) - o, YALNIZ istifadəçinin öz yaratdıqlarını göstərir.
+        # Təşkilatı olmayan istifadəçi (nadir hal) yalnız öz yaratdıqlarını görür.
         else:
-            qs = qs.filter(created_by=user)
+            org_ids = scoped_organization_ids(user)
+            qs = qs.filter(organization_id__in=org_ids) if org_ids else qs.filter(created_by=user)
 
         # ---------------------------------------------------------
         # Approval stage filter
@@ -371,8 +385,14 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        is_confidential = str(request.data.get("is_confidential", "")).lower() in ("true", "1", "yes")
         doc_type = serializer.validated_data.get("doc_type")
+        if not _can_create_doc_type(request.user, doc_type):
+            return Response(
+                {"detail": "Bu kateqoriyada yeni sənəd yaratmaq üçün icazəniz yoxdur."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        is_confidential = str(request.data.get("is_confidential", "")).lower() in ("true", "1", "yes")
         schema = get_schema(doc_type)
         labels_by_key = {f["key"]: f["label"] for f in schema["file_fields"]}
 
