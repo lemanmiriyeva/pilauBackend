@@ -43,6 +43,16 @@ class OrganizationTableSerializer(serializers.ModelSerializer):
         fields = ["id", "full_name", "code", "voen", "is_active", "authorized_person_count", "created_at"]
 
 
+class OrganizationReportCardSerializer(serializers.ModelSerializer):
+    """Hesabatlar -> Təşkilatlar səhifəsindəki kart siyahısı üçün - hər təşkilatın YARATDIĞI
+    ÜMUMİ lisenziya sənədi sayı ilə birlikdə (bax OrganizationReportCardsView)."""
+    license_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Organization
+        fields = ["id", "full_name", "code", "voen", "is_active", "license_count"]
+
+
 class OrganizationDetailSerializer(serializers.ModelSerializer):
     authorized_persons = AuthorizedPersonSerializer(many=True, required=False)
 

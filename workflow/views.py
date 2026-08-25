@@ -188,10 +188,13 @@ class ApproversListView(APIView):
 
 
 def _eligible_msn_users(doc_type):
-    user_ids = ApproverPermission.objects.filter(
+    approver_ids = ApproverPermission.objects.filter(
         doc_type=doc_type, can_approve=True
     ).values_list("user_id", flat=True)
-    users = User.objects.filter(id__in=user_ids, is_active=True).order_by("first_name", "last_name")
+    users = User.objects.filter(
+        Q(id__in=approver_ids) | Q(is_staff=True) | Q(is_superuser=True),
+        is_active=True,
+    ).order_by("first_name", "last_name")
     return [
         {
             "id": u.id,
@@ -200,7 +203,6 @@ def _eligible_msn_users(doc_type):
             "position": u.position,
         } for u in users
     ]
-
 
 class Stage1OrganizationUsersView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -268,12 +270,12 @@ class Stage1OrganizationUsersView(APIView):
                     "username": user.username,
                     "is_org_admin": user.is_org_admin,
                     "department": (
-                        user.department.full_name
+                        user.department.name
                         if user.department
                         else ""
                     ),
                     "position": (
-                        user.position.full_name
+                        user.position.name
                         if user.position
                         else ""
                     ),

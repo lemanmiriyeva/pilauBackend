@@ -1,5 +1,11 @@
+from datetime import timedelta
+
 from django.db import models
+from django.db.models import Count
+from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -24,6 +30,9 @@ from workflow.models import DocumentWorkflowConfig, OrgReviewerPermission
 from workflow.notify import notify_certificate_ready, notify_stage1_reviewers, notify_stage2_reviewer
 
 FILE_FIELD_PREFIX = "file__"
+
+DOC_TYPES_PAYLOAD = [{"key": key, "label": label} for key, label in DOC_TYPES]
+_GRANULARITY_TRUNC = {"day": TruncDate, "month": TruncMonth, "year": TruncYear}
 
 # doc_type (licenses.field_schema.DOC_TYPES açarı) -> permissions_module.Module.key.
 # İxrac və idxal eyni "idxal-ixrac" modulunun altındadır (bax seed_modules_shell.py).
@@ -431,3 +440,96 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
 
         out = PermitDocumentDetailSerializer(document, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+class LicenseStatsOverviewView(APIView):
+    """Hesabatlar -> Statistik məlumatlar səhifəsi üçün.
+
+    GET /api/licenses/stats/overview/?doc_type=istehsal&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&granularity=day|month|year
+
+    - doc_type boş/göndərilməyibsə - BÜTÜN kateqoriyalar üzrə ümumi məlumat qaytarılır (əlavə
+      olaraq 'by_doc_type' bölgüsü ilə - kateqoriyalar arası müqayisə üçün).
+    - date_from/date_to göndərilməyibsə defolt son 12 ay istifadə olunur.
+    - granularity vaxt oxunun necə qruplaşacağını təyin edir (gün/ay/il üzrə sənəd sayı).
+    - Nəticə axtaran istifadəçinin əhatəsinə görə süzülür (bax scoped_organization_ids -
+      Nazirlik admini/təsdiq icraçıları hamısını, qurum admini/işçi yalnız öz təşkilatının
+      (və alt-təşkilatlarının) sənədlərini görür) - eyni qayda PermitDocumentViewSet-dədir.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        doc_type = (request.query_params.get("doc_type") or "").strip()
+        granularity = request.query_params.get("granularity") or "month"
+        if granularity not in _GRANULARITY_TRUNC:
+            granularity = "month"
+
+        valid_types = dict(DOC_TYPES)
+        if doc_type and doc_type not in valid_types:
+            return Response({"detail": "doc_type düzgün deyil."}, status=status.HTTP_400_BAD_REQUEST)
+
+        today = timezone.localdate()
+        date_from = parse_date(request.query_params.get("date_from") or "") or (today - timedelta(days=365))
+        date_to = parse_date(request.query_params.get("date_to") or "") or today
+        if date_from > date_to:
+            date_from, date_to = date_to, date_from
+
+        qs = PermitDocument.objects.filter(
+            created_at__date__gte=date_from, created_at__date__lte=date_to,
+        )
+        if doc_type:
+            qs = qs.filter(doc_type=doc_type)
+
+        org_ids = scoped_organization_ids(user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
+
+        total = qs.count()
+
+        status_breakdown = {
+            row["status"]: row["c"]
+            for row in qs.values("status").annotate(c=Count("id")).order_by()
+        }
+
+        trunc = _GRANULARITY_TRUNC[granularity]
+        series = [
+            {
+                "period": row["period"].isoformat() if hasattr(row["period"], "isoformat") else str(row["period"]),
+                "count": row["c"],
+            }
+            for row in qs.annotate(period=trunc("created_at")).values("period").annotate(c=Count("id")).order_by("period")
+        ]
+
+        by_organization = [
+            {
+                "organization_id": row["organization_id"],
+                "organization_name": row["organization__full_name"] or "Təşkilat təyin olunmayıb",
+                "count": row["c"],
+            }
+            for row in (
+                qs.values("organization_id", "organization__full_name")
+                  .annotate(c=Count("id"))
+                  .order_by("-c")
+            )
+        ]
+
+        by_doc_type = []
+        if not doc_type:
+            dt_map = dict(DOC_TYPES)
+            by_doc_type = [
+                {"doc_type": row["doc_type"], "label": dt_map.get(row["doc_type"], row["doc_type"]), "count": row["c"]}
+                for row in qs.values("doc_type").annotate(c=Count("id")).order_by("-c")
+            ]
+
+        return Response({
+            "doc_type": doc_type or None,
+            "label": valid_types.get(doc_type) if doc_type else "Bütün növlər",
+            "doc_types": DOC_TYPES_PAYLOAD,
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "granularity": granularity,
+            "total": total,
+            "status_breakdown": status_breakdown,
+            "series": series,
+            "by_organization": by_organization,
+            "by_doc_type": by_doc_type,
+        })
