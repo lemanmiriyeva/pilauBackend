@@ -219,10 +219,11 @@ class Stage1OrganizationUsersView(APIView):
                 doc_type=doc_type
             )
         except DocumentWorkflowConfig.DoesNotExist:
-            return Response(
-                {"detail": "Workflow config tapılmadı."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            # Hələ heç kim bu kateqoriya üçün "Təsdiq axını"nda heç nə saxlamayıbsa,
+            # DocumentWorkflowConfig sətri yaranmır (WorkflowConfigView.get() bunu defolt
+            # 'qurum' rejimi kimi göstərir) - burada da eyni fallback tətbiq olunmalıdır,
+            # əks halda accordion (qurum + işçilər siyahısı) HEÇ VAXT açılmır (404).
+            config = None
 
         organizations = (
             Organization.objects
@@ -240,10 +241,11 @@ class Stage1OrganizationUsersView(APIView):
             )
 
             approver_ids = (
-                ApproverPermission.objects
+                OrgReviewerPermission.objects
                 .filter(
                     doc_type=doc_type,
-                    can_approve=True,
+                    can_review=True,
+                    organization=organization,
                     user__organization=organization,
                 )
                 .values_list("user_id", flat=True)
@@ -284,6 +286,7 @@ class Stage1OrganizationUsersView(APIView):
                     organization=organization,
                 )
                 .first()
+                if config else None
             )
 
             selected_user_ids = []
@@ -343,6 +346,22 @@ class WorkflowConfigView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        existing = DocumentWorkflowConfig.objects.filter(doc_type=data["doc_type"]).first()
+
+        # stage2 sahələri (stage2_enabled/stage2_user) bu sorğuda ÖZÜ göndərilməyibsə, mövcud
+        # dəyərlər olduğu kimi saxlanılır. Əks halda accordion-dan yalnız 1-ci mərhələnin
+        # (qurum + işçilər) yenilənməsi hər dəfə stage2_user-i də yenidən tələb edir və
+        # doğrulama səhvən uğursuz olurdu ("...icazəsi yoxdur" - stage2_user default None idi).
+        if "stage2_enabled" in request.data:
+            stage2_enabled = data["stage2_enabled"]
+        else:
+            stage2_enabled = existing.stage2_enabled if existing else True
+
+        if "stage2_user" in request.data:
+            stage2_user_id = data.get("stage2_user")
+        else:
+            stage2_user_id = existing.stage2_user_id if existing else None
+
         eligible_ids = {u.id for u in User.objects.filter(
             id__in=ApproverPermission.objects.filter(
                 doc_type=data["doc_type"], can_approve=True
@@ -354,12 +373,14 @@ class WorkflowConfigView(APIView):
                 {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if data.get("stage2_enabled", True) and data.get("stage2_user") not in eligible_ids:
+        # stage2_user_id=None (hələ seçilməyib) - bu, kifayət qədər əsaslı bir aralıq vəziyyətdir
+        # (məs. admin əvvəlcə yalnız 1-ci mərhələni qurur, 2-ci mərhələni sonra tənzimləyəcək) -
+        # ona görə yalnız FAKTİKİ bir istifadəçi seçiləndə onun icazəsini yoxlayırıq.
+        if stage2_enabled and stage2_user_id is not None and stage2_user_id not in eligible_ids:
             return Response(
                 {"detail": "Seçilən istifadəçinin bu kateqoriya üzrə təsdiq və yoxlama icazəsi yoxdur."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
 
         config, created = DocumentWorkflowConfig.objects.update_or_create(
             doc_type=data["doc_type"],
@@ -370,8 +391,8 @@ class WorkflowConfigView(APIView):
                     if data["stage1_mode"] == "msn"
                     else None
                 ),
-                "stage2_enabled": data.get("stage2_enabled", True),
-                "stage2_user_id": data.get("stage2_user"),
+                "stage2_enabled": stage2_enabled,
+                "stage2_user_id": stage2_user_id,
                 "updated_by": request.user,
             },
         )
