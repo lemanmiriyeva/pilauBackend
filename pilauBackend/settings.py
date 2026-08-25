@@ -425,10 +425,8 @@ USE_TZ = True
 # ==========================================================================
 # STATIC / MEDIA
 # ==========================================================================
-
-STATIC_URL = "static/"
-
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = "media/"
 
