@@ -57,7 +57,11 @@ class FirstLoginPasswordSetSerializer(serializers.Serializer):
 class SelfProfileUpdateSerializer(serializers.ModelSerializer):
     """Şəxsi kabinet - istifadəçinin öz məlumatlarını redaktə etməsi üçün (Image 4).
     Təşkilat, istifadəçi adı, FİN kod və status kimi sahələr buradan dəyişilmir
-    (FİN kod sistem tərəfindən verilən identifikatordur, UI-da disabled göstərilir)."""
+    (FİN kod sistem tərəfindən verilən identifikatordur, UI-da disabled göstərilir).
+
+    department/position artıq sərbəst mətn deyil, FK-dir (bax User modeli) - buraya YALNIZ
+    istifadəçinin öz təşkilatına aid OrganizationDepartment/OrganizationPosition seçilə bilər,
+    başqa təşkilatın siyahısından ID göndərmək rədd edilir."""
 
     class Meta:
         model = User
@@ -71,16 +75,52 @@ class SelfProfileUpdateSerializer(serializers.ModelSerializer):
             "id_card_serial", "department", "position",
         ]}
 
+    def _validate_own_org(self, value, field_label):
+        if value is None:
+            return value
+        user = self.instance
+        if user is None or not user.organization_id or value.organization_id != user.organization_id:
+            raise serializers.ValidationError(f"Bu {field_label} sizin təşkilatınıza aid deyil.")
+        return value
+
+    def validate_department(self, value):
+        return self._validate_own_org(value, "departament")
+
+    def validate_position(self, value):
+        return self._validate_own_org(value, "vəzifə")
+
 
 class UserOrganizationSerializer(serializers.Serializer):
-    """Şəxsi kabinet - 'Təşkilat' bölməsi üçün yığcam, read-only görünüş (Image 4)."""
+    """Şəxsi kabinet - 'Təşkilat' bölməsi üçün yığcam, read-only görünüş (Image 4).
+    Employee-nin öz təşkilatı haqqında bilməli olduğu BÜTÜN əsas sahələr - yalnız
+    full_name/voen deyil, əlaqə məlumatları da daxil olmaqla."""
     id = serializers.IntegerField()
     full_name = serializers.CharField()
     voen = serializers.CharField()
+    state_reg_number = serializers.CharField()
+    email = serializers.CharField()
+    phone = serializers.CharField()
+    address = serializers.CharField()
+
+
+class UserDepartmentSerializer(serializers.Serializer):
+    """Şəxsi kabinet - departament seçimini oxunaqlı ad (name) ilə göstərmək üçün.
+    User.department artıq sərbəst mətn deyil, FK-dir - frontend-in oxunaqlı ad görməsi
+    üçün department_detail (bax UserSerializer) kimi əlavə olunur."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class UserPositionSerializer(serializers.Serializer):
+    """Şəxsi kabinet - vəzifə seçimini oxunaqlı ad (name) ilə göstərmək üçün."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
 
 
 class UserSerializer(serializers.ModelSerializer):
     organization_detail = UserOrganizationSerializer(source="organization", read_only=True)
+    department_detail = UserDepartmentSerializer(source="department", read_only=True)
+    position_detail = UserPositionSerializer(source="position", read_only=True)
 
     class Meta:
         model = User
@@ -94,7 +134,9 @@ class UserSerializer(serializers.ModelSerializer):
             "organization",
             "organization_detail",
             "department",
+            "department_detail",
             "position",
+            "position_detail",
             "birth_date",
             "fin_kod",
             "id_card_serial",

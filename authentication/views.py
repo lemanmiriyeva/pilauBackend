@@ -433,7 +433,6 @@ class ChangePasswordView(APIView):
 
 
 class MeView(APIView):
-    """Şəxsi kabinet (Image 4). GET - öz məlumatları, PATCH - öz məlumatlarını redaktə et."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -446,6 +445,19 @@ class MeView(APIView):
         log_security_event("PROFILE_SELF_UPDATE", user=request.user, ip=get_client_ip(request))
         return Response(UserSerializer(request.user).data)
 
+
+class MyOrganizationOptionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+
+    def get(self, request):
+        from organizations.models import OrganizationDepartment, OrganizationPosition
+
+
+        if not request.user.organization_id:
+            return Response({"departments": [], "positions": []})
+
+        departments = OrganizationDepartment.objects.filter(organization_id=request.user.organization_id).values("id", "name")
 
 # ---------------------------------------------------------------------------
 # Admin-only: istifadəçi yaratma, kilidi açma, 2FA sıfırlama
@@ -499,7 +511,7 @@ class CreateUserView(APIView):
             )
 
         log_security_event("USER_CREATED", user=request.user, ip=get_client_ip(request),
-                            extra=f"created_user={user.username}")
+                           extra=f"created_user={user.username}")
         return Response(UserListSerializer(user).data, status=201)
 
 
@@ -583,7 +595,7 @@ class AdminUnlockUserView(APIView):
         target.save(update_fields=["is_locked", "locked_at", "failed_login_attempts"])
 
         log_security_event("ADMIN_UNLOCK_USER", user=request.user, ip=get_client_ip(request),
-                            extra=f"target={target.username}")
+                           extra=f"target={target.username}")
         send_mail_to(target.email, "Hesabınız aktivləşdirildi",
                      "Hesabınızın bloku administrator tərəfindən aradan qaldırıldı.")
         return Response({"detail": "İstifadəçinin kilidi açıldı."})
@@ -606,7 +618,7 @@ class AdminResetTOTPView(APIView):
 
         target.reset_totp()
         log_security_event("ADMIN_RESET_TOTP", user=request.user, ip=get_client_ip(request),
-                            extra=f"target={target.username}")
+                           extra=f"target={target.username}")
         send_mail_to(target.email, "2FA sıfırlandı",
                      "İki mərhələli doğrulama (2FA) parametrləriniz administrator tərəfindən "
                      "sıfırlandı. Növbəti daxil olduğunuzda yenidən quracaqsınız.")

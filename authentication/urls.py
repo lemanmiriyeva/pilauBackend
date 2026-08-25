@@ -26,4 +26,5 @@ urlpatterns = [
     path("admin/users/unlock/", views.AdminUnlockUserView.as_view(), name="admin_unlock_user"),
     path("admin/users/reset-totp/", views.AdminResetTOTPView.as_view(), name="admin_reset_totp"),
     path("admin/users/<int:pk>/", views.UserAdminDetailView.as_view(), name="admin_user_detail"),
+    path("my-organization-options/", views.MyOrganizationOptionsView.as_view(), name="my_organization_options"),
 ]
