@@ -1,17 +1,20 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from authentication.models import User
 from licenses.field_schema import DOC_TYPES
-from organizations.models import Organization
-from organizations.permissions import is_full_admin, is_org_admin, scoped_organization_ids
+from organizations.permissions import is_full_admin, is_org_admin
 
-from workflow.models import ApproverPermission, DocumentWorkflowConfig, Notification, OrgReviewerPermission, OrgStage2Setting
+from workflow.models import ApproverPermission, Notification, OrgReviewerPermission, OrgStage2Setting, \
+    OrganizationStage1Approver
 from workflow.serializers import NotificationSerializer, OrgStage2SettingToggleSerializer, PermissionToggleSerializer, WorkflowConfigUpdateSerializer
 from authentication.models import User
 from organizations.models import Organization
+from workflow.models import (
+    DocumentWorkflowConfig,
+)
 
 DOC_TYPES_PAYLOAD = [{"key": key, "label": label} for key, label in DOC_TYPES]
 
@@ -203,14 +206,7 @@ class Stage1OrganizationUsersView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request):
-        organization_id = request.query_params.get("organization_id")
         doc_type = request.query_params.get("doc_type")
-
-        if not organization_id:
-            return Response(
-                {"detail": "organization_id tələb olunur."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         if not doc_type:
             return Response(
@@ -219,84 +215,95 @@ class Stage1OrganizationUsersView(APIView):
             )
 
         try:
-            organization = Organization.objects.get(
-                id=organization_id
+            config = DocumentWorkflowConfig.objects.get(
+                doc_type=doc_type
             )
-        except Organization.DoesNotExist:
+        except DocumentWorkflowConfig.DoesNotExist:
             return Response(
-                {"detail": "Qurum tapılmadı."},
+                {"detail": "Workflow config tapılmadı."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Qurumun istifadəçiləri
-        users = User.objects.filter(
-            organization=organization,
-            is_active=True,
-        ).select_related(
-            "department",
-            "position",
+        organizations = (
+            Organization.objects
+            .filter(is_active=True)
+            .order_by("full_name")
         )
-
-        # Qurum adminləri
-        org_admins = users.filter(
-            is_org_admin=True
-        )
-
-        # Həmin doc_type üzrə təsdiq hüququ olanlar
-        approver_user_ids = ApproverPermission.objects.filter(
-            organization=organization,
-            doc_type=doc_type,
-            value=True,
-        ).values_list(
-            "user_id",
-            flat=True,
-        )
-
-        approvers = users.filter(
-            id__in=approver_user_ids
-        )
-
-        # Bir user həm admin, həm approver ola bilər.
-        user_map = {}
-
-        for user in org_admins:
-            user_map[user.id] = user
-
-        for user in approvers:
-            user_map[user.id] = user
 
         result = []
 
-        for user in user_map.values():
+        for organization in organizations:
+
+            users = User.objects.filter(
+                organization=organization,
+                is_active=True,
+            )
+
+            approver_ids = (
+                ApproverPermission.objects
+                .filter(
+                    doc_type=doc_type,
+                    can_approve=True,
+                    user__organization=organization,
+                )
+                .values_list("user_id", flat=True)
+            )
+
+            users = users.filter(
+                Q(is_org_admin=True) |
+                Q(id__in=approver_ids)
+            ).distinct()
+
+            users_data = []
+
+            for user in users:
+                users_data.append({
+                    "id": user.id,
+                    "full_name": (
+                        f"{user.first_name} {user.last_name}".strip()
+                        or user.username
+                    ),
+                    "username": user.username,
+                    "is_org_admin": user.is_org_admin,
+                    "department": (
+                        user.department.full_name
+                        if user.department
+                        else ""
+                    ),
+                    "position": (
+                        user.position.full_name
+                        if user.position
+                        else ""
+                    ),
+                })
+
+            organization_config = (
+                OrganizationStage1Approver.objects
+                .filter(
+                    workflow_config=config,
+                    organization=organization,
+                )
+                .first()
+            )
+
+            selected_user_ids = []
+
+            if organization_config:
+                selected_user_ids = list(
+                    organization_config.users.values_list(
+                        "id",
+                        flat=True,
+                    )
+                )
+
             result.append({
-                "id": user.id,
-                "full_name": (
-                    f"{user.first_name} {user.last_name}".strip()
-                    or user.username
-                ),
-                "username": user.username,
-                "is_org_admin": user.is_org_admin,
-                "department": (
-                    user.department.name
-                    if user.department
-                    else ""
-                ),
-                "position": (
-                    user.position.name
-                    if user.position
-                    else ""
-                ),
+                "organization_id": organization.id,
+                "organization_name": organization.full_name,
+                "users": users_data,
+                "selected_user_ids": selected_user_ids,
             })
 
-        result.sort(
-            key=lambda x: (
-                not x["is_org_admin"],
-                x["full_name"].lower(),
-            )
-        )
-
         return Response(result)
-
 class WorkflowConfigView(APIView):
     """Sənəd növü üzrə mərhələli təsdiq axınının marşrutlanması (1-ci mərhələ: Qurum/MSN,
     2-ci mərhələ: həmişə MSN). Yalnız Nazirlik admini görə/dəyişə bilər.
@@ -327,9 +334,7 @@ class WorkflowConfigView(APIView):
                 "stage2_enabled": config.stage2_enabled if config else True,
                 "stage2_user": config.stage2_user_id if config else None,
                 "eligible_users": _eligible_msn_users(key),
-                "stage1_users": list(
-                    config.stage1_users.values_list("id", flat=True)
-                ) if config else [],
+
             })
         return Response(rows)
 
@@ -355,23 +360,54 @@ class WorkflowConfigView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        stage1_users = data.get("stage1_users", [])
 
         config, created = DocumentWorkflowConfig.objects.update_or_create(
             doc_type=data["doc_type"],
             defaults={
                 "stage1_mode": data["stage1_mode"],
-                "stage1_user_id": data.get("stage1_user"),
+                "stage1_user_id": (
+                    data.get("stage1_user")
+                    if data["stage1_mode"] == "msn"
+                    else None
+                ),
                 "stage2_enabled": data.get("stage2_enabled", True),
                 "stage2_user_id": data.get("stage2_user"),
                 "updated_by": request.user,
             },
         )
-
         if data["stage1_mode"] == "qurum":
-            config.stage1_users.set(stage1_users)
+
+            organization_rows = data.get(
+                "organization_stage1_approvers",
+                []
+            )
+
+            for row in organization_rows:
+                organization_id = row.get("organization_id")
+                user_ids = row.get("user_ids", [])
+
+                organization_config, _ = (
+                    OrganizationStage1Approver.objects
+                    .get_or_create(
+                        workflow_config=config,
+                        organization_id=organization_id,
+                    )
+                )
+
+                organization_config.users.set(user_ids)
+
+                organization_config.updated_by = request.user
+                organization_config.save(
+                    update_fields=[
+                        "updated_by",
+                        "updated_at",
+                    ]
+                )
+
         else:
-            config.stage1_users.clear()
+            OrganizationStage1Approver.objects.filter(
+                workflow_config=config
+            ).delete()
         return Response({
             "doc_type": config.doc_type,
             "stage1_mode": config.stage1_mode,

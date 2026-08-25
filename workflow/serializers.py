@@ -26,51 +26,33 @@ class WorkflowConfigUpdateSerializer(serializers.Serializer):
 
     stage1_user = serializers.IntegerField(
         required=False,
-        allow_null=True
+        allow_null=True,
     )
 
-    stage1_users = serializers.ListField(
-        child=serializers.IntegerField(),
+    organization_stage1_approvers = serializers.ListField(
         required=False,
         allow_empty=True,
-        default=list,
+        child=serializers.DictField(),
     )
 
     stage2_enabled = serializers.BooleanField(
         required=False,
-        default=True
+        default=True,
     )
 
     stage2_user = serializers.IntegerField(
         required=False,
-        allow_null=True
+        allow_null=True,
     )
-
-    def validate(self, attrs):
-        if attrs["stage1_mode"] == "msn":
-            if not attrs.get("stage1_user"):
-                raise serializers.ValidationError({
-                    "stage1_user":
-                        "MSN seçildikdə 1-ci mərhələ üçün icraçı seçilməlidir."
-                })
-
-        if attrs["stage1_mode"] == "qurum":
-            if not attrs.get("stage1_users"):
-                raise serializers.ValidationError({
-                    "stage1_users":
-                        "Qurum seçildikdə ən azı bir təsdiqçi seçilməlidir."
-                })
-
-        if attrs.get("stage2_enabled", True) and not attrs.get("stage2_user"):
-            raise serializers.ValidationError({
-                "stage2_user":
-                    "2-ci mərhələ aktiv olduqda icraçı seçilməlidir."
-            })
-
-        return attrs
-
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ["id", "title", "body", "link", "is_read", "created_at"]
+
+class OrganizationStage1ApproverSerializer(serializers.Serializer):
+    organization_id = serializers.IntegerField()
+    user_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=True,
+    )

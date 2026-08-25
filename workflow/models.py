@@ -106,48 +106,57 @@ class ApproverPermission(models.Model):
 
 
 class DocumentWorkflowConfig(models.Model):
-    """Sənəd növü üzrə mərhələli təsdiq axınının marşrutlanması.
+    STAGE1_CHOICES = [
+        ("qurum", "Qurum"),
+        ("msn", "MSN"),
+    ]
 
-    1-ci mərhələ ya müraciət edən təşkilatın öz admininə (stage1_mode='qurum'), ya da
-    birbaşa Nazirliyin təyin etdiyi konkret bir işçiyə (stage1_mode='msn', bax stage1_user)
-    gedir. 2-ci mərhələ (son təsdiq) hər zaman Nazirlik tərəfindəndir - stage2_user bunun
-    üçün təyin edilmiş konkret işçidir.
+    doc_type = models.CharField(
+        "Lisenziya kateqoriyası",
+        max_length=20,
+        choices=DOC_TYPES,
+        unique=True,
+    )
 
-    Hər iki halda 'msn' seçildikdə təyin oluna bilən istifadəçilər yalnız həmin doc_type
-    üzrə ApproverPermission (Təsdiq hüquqları) verilmiş şəxslərdir - bax _eligible_user_ids.
-    """
-    STAGE1_CHOICES = [("qurum", "Qurum"), ("msn", "MSN")]
+    stage1_mode = models.CharField(
+        "1-ci mərhələ",
+        max_length=10,
+        choices=STAGE1_CHOICES,
+        default="qurum",
+    )
 
-    doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES, unique=True)
-    stage1_mode = models.CharField("1-ci mərhələ", max_length=10, choices=STAGE1_CHOICES, default="qurum")
+    # Yalnız stage1_mode = msn olduqda istifadə olunur
     stage1_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        verbose_name="1-ci mərhələ icraçısı",
+        verbose_name="1-ci mərhələ icraçısı (MSN seçildikdə)",
     )
 
-    stage1_users = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name="workflow_stage1_configs",
-        verbose_name="1-ci mərhələ təsdiqçiləri",
-    )
     stage2_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="+",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
         verbose_name="2-ci mərhələ icraçısı (MSN)",
     )
+
     stage2_enabled = models.BooleanField(
         "2-ci mərhələ aktivdir",
         default=True,
     )
+
     updated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="+",
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
     )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -156,7 +165,10 @@ class DocumentWorkflowConfig(models.Model):
         ordering = ["doc_type"]
 
     def __str__(self):
-        return f"{self.get_doc_type_display()} · 1-ci: {self.get_stage1_mode_display()} · 2-ci: MSN"
+        return (
+            f"{self.get_doc_type_display()} · "
+            f"1-ci: {self.get_stage1_mode_display()}"
+        )
 
 
 class OrgStage2Setting(models.Model):
@@ -218,3 +230,50 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.recipient} · {self.title}"
+
+
+class OrganizationStage1Approver(models.Model):
+    workflow_config = models.ForeignKey(
+        DocumentWorkflowConfig,
+        on_delete=models.CASCADE,
+        related_name="organization_stage1_approvers",
+    )
+
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="stage1_workflow_configs",
+    )
+
+    users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="stage1_organization_workflows",
+        verbose_name="1-ci mərhələ təsdiqçiləri",
+    )
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Qurum 1-ci mərhələ təsdiqçisi"
+        verbose_name_plural = "Qurum 1-ci mərhələ təsdiqçiləri"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workflow_config", "organization"],
+                name="unique_workflow_organization_stage1",
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.workflow_config.get_doc_type_display()} · "
+            f"{self.organization}"
+        )
