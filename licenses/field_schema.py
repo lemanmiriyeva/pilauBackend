@@ -27,7 +27,12 @@ LICENSE_TYPE_CHOICES = (
     ("yeni", "Yeni lisenziya"),
     ("yeniden_resmilesdirme", "Yenidən rəsmiləşdirmə"),
 )
+ACTIVITY_TYPE_CHOICES = (
+    ("herbi_texnika", "Hərbi texnika"),
+    ("doyus_teyinatli", "Döyüş təyinatlı"),
+    ("silah", "Silah"),
 
+)
 STATUS_CHOICES = (
     ("gozleyir", "Gözlənilir"),
     ("aktiv", "Aktiv"),
@@ -97,11 +102,11 @@ _ISTEHSAL_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
     {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True, "options": LICENSE_TYPE_CHOICES},
-    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "text", "required": True},
+    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True, "options": ACTIVITY_TYPE_CHOICES},
     {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
-    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text", "required": True},
+    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text","readonly":True, "required": True, "value":'"İcazələr haqqında Qanun",VI-VII bəndlər'},
     {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
-    {"key": "muddet", "label": "Müddət", "type": "text", "required": True},
+    {"key": "muddet", "label": "Müddət", "type": "text", "readonly":True, "required": True, "value":'Müddətsiz'},
     {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
 ]
 

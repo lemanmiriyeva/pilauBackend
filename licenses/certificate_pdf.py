@@ -111,15 +111,34 @@ def _applicant_block(document):
 
 
 def _signer_info(document, certificate):
-    """İmzalayan vəzifəli şəxs - son mərhələni təsdiqləyən MSN nümayəndəsi (stage2_approved_by);
-    yoxdursa sənədi 'Tamamlandı' edən istifadəçiyə düşür."""
-    user = document.stage2_approved_by or certificate.completed_by
+    """İmzalayan vəzifəli şəxs / vəzifəsi.
+
+    Əsas mənbə: 'Təsdiq axını' ekranında bu sənəd növü (doc_type) üçün təyin edilmiş
+    İmzalayan şəxs (workflow.DocumentWorkflowConfig.signer_user) - bax workflow/views.py
+    WorkflowConfigView, frontend lisenziya-icazeleri/tesdiq-axini/page.js.
+
+    Təyin olunmayıbsa (signer_user boşdursa), köhnə davranışa - faktiki 2-ci mərhələ
+    təsdiqçisinə, o da yoxdursa sənədi 'Tamamlandı' edən şəxsə - geri düşür ki, köhnə
+    sənədlər üçün sahə boş qalmasın."""
+    from workflow.models import DocumentWorkflowConfig
+
+    user = None
+    config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+    if config and config.signer_user_id:
+        user = config.signer_user
+
+    if not user:
+        user = document.stage2_approved_by or certificate.completed_by
+
     if not user:
         return "", ""
-    name = user.get_full_name() or user.username
-    position = getattr(user, "position", "") or ""
-    return name, position
 
+    name = user.get_full_name() or user.username
+
+    position_obj = getattr(user, "position", None)
+    position = position_obj.name if position_obj else ""
+
+    return name, position
 
 def _label_style():
     return ParagraphStyle("field_label", fontName=FONT_REGULAR, fontSize=8, leading=10, textColor=MUTED)

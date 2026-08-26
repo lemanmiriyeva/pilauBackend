@@ -54,23 +54,33 @@ class OrganizationTreeView(generics.ListAPIView):
 
 
 class OrganizationTableListView(generics.ListAPIView):
-    """Təşkilatlar siyahı səhifəsi (list) - səlahiyyətli şəxs sayı ilə birlikdə.
-
-    Staff/superuser bütün təşkilatları görür; digərləri (adi işçi və ya qurum admini)
-    yalnız öz təşkilatını + alt-təşkilatlarını görür (bax: scoped_organization_ids)."""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = OrganizationTableSerializer
 
     def get_queryset(self):
         qs = Organization.objects.annotate(
-            authorized_person_count=Count("authorized_persons", distinct=True)
+            authorized_person_count=Count(
+                "authorized_persons",
+                distinct=True
+            ),
+            user_count=Count(
+                "users",
+                distinct=True
+            ),
         ).order_by("full_name")
+
         org_ids = scoped_organization_ids(self.request.user)
+
         if org_ids is not None:
             qs = qs.filter(id__in=org_ids)
+
         search = self.request.query_params.get("search")
+
         if search:
-            qs = qs.filter(full_name__icontains=search)
+            qs = qs.filter(
+                full_name__icontains=search
+            )
+
         return qs
 
 
@@ -119,6 +129,7 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Təşkilatı yalnız sistem administratoru silə bilər.")
         return super().delete(request, *args, **kwargs)
+
 
 class OrganizationReportCardsView(generics.ListAPIView):
     """Hesabatlar -> Təşkilatlar səhifəsi üçün kart şəklində siyahı - hər təşkilatın (bütün
@@ -197,7 +208,8 @@ class OrganizationStatsView(APIView):
                 "period": row["period"].isoformat() if hasattr(row["period"], "isoformat") else str(row["period"]),
                 "count": row["c"],
             }
-            for row in qs.annotate(period=trunc("created_at")).values("period").annotate(c=Count("id")).order_by("period")
+            for row in
+            qs.annotate(period=trunc("created_at")).values("period").annotate(c=Count("id")).order_by("period")
         ]
 
         documents = list(
@@ -236,12 +248,20 @@ class OrganizationDepartmentViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationDepartmentSerializer
 
     def get_queryset(self):
-        qs = OrganizationDepartment.objects.select_related("organization").order_by(
+        qs = OrganizationDepartment.objects.select_related("organization", "parent", "head").order_by(
             "organization__full_name", "name"
         )
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
+        parent_id = self.request.query_params.get("parent")
+        if parent_id == "null":
+            qs = qs.filter(parent__isnull=True)
+        elif parent_id:
+            try:
+                qs = qs.filter(parent_id=int(parent_id))
+            except (TypeError, ValueError):
+                pass
         search = self.request.query_params.get("search")
         if search:
             qs = qs.filter(name__icontains=search)
@@ -249,18 +269,81 @@ class OrganizationDepartmentViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationPositionViewSet(viewsets.ModelViewSet):
-    """Bax OrganizationDepartmentViewSet - eyni qayda, 'Vəzifələr' üçün."""
     permission_classes = [permissions.IsAdminUser]
     serializer_class = OrganizationPositionSerializer
 
     def get_queryset(self):
-        qs = OrganizationPosition.objects.select_related("organization").order_by(
-            "organization__full_name", "name"
+        qs = OrganizationPosition.objects.select_related(
+            "organization",
+            "department",
+        ).order_by(
+            "organization__full_name",
+            "department__name",
+            "name",
         )
-        org_id = self.request.query_params.get("organization")
-        if org_id:
-            qs = qs.filter(organization_id=org_id)
+
+        organization_id = self.request.query_params.get("organization")
+        department_id = self.request.query_params.get("department")
+
+        if organization_id:
+            qs = qs.filter(
+                organization_id=organization_id
+            )
+
+        if department_id:
+            qs = qs.filter(
+                department_id=department_id
+            )
+
         search = self.request.query_params.get("search")
+
         if search:
-            qs = qs.filter(name__icontains=search)
+            qs = qs.filter(
+                name__icontains=search
+            )
+
         return qs
+
+
+class OrganizationDepartmentsByOrganizationView(generics.ListAPIView):
+    """
+    GET /api/organizations/<organization_id>/departments/
+
+    Seçilmiş təşkilata aid departamentləri qaytarır.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrganizationDepartmentSerializer
+
+    def get_queryset(self):
+        organization_id = self.kwargs["organization_id"]
+
+        return OrganizationDepartment.objects.filter(
+            organization_id=organization_id
+        ).select_related(
+            "organization",
+            "parent",
+            "head",
+        ).order_by("name")
+
+
+class OrganizationPositionsByOrganizationView(generics.ListAPIView):
+    """
+    GET /api/organizations/<organization_id>/positions/
+
+    Seçilmiş təşkilata aid vəzifələri qaytarır.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrganizationPositionSerializer
+
+    def get_queryset(self):
+        organization_id = self.kwargs["organization_id"]
+
+        return OrganizationPosition.objects.filter(
+            organization_id=organization_id
+        ).select_related(
+            "organization",
+            "department",
+        ).order_by(
+            "department__name",
+            "name",
+        )

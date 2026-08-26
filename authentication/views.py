@@ -487,6 +487,7 @@ class CreateUserView(APIView):
         data = dict(serializer.validated_data)
 
         modules_data = data.pop("modules", []) or []
+        approver_doc_types = data.pop("approver_doc_types", []) or []
         password = data.pop("password", "") or DEFAULT_INITIAL_PASSWORD
 
         user = User(**data)
@@ -509,6 +510,26 @@ class CreateUserView(APIView):
                     "granted_by": request.user,
                 },
             )
+
+        # İmzalama / Təsdiq (2-ci mərhələ, MSN) hüquqları - hər sənəd növü üçün ayrıca.
+        # Bax workflow.models.ApproverPermission - eyni model "Təsdiq hüquqları" (Stage2PermissionsView)
+        # ekranından da idarə olunur, burda isə istifadəçi yaradılan zaman birbaşa təyin edilə bilir.
+        if approver_doc_types:
+            from workflow.models import ApproverPermission
+            from licenses.field_schema import DOC_TYPES
+
+            valid_doc_types = dict(DOC_TYPES)
+            for item in approver_doc_types:
+                doc_type = item.get("doc_type")
+                if doc_type not in valid_doc_types:
+                    continue
+                ApproverPermission.objects.update_or_create(
+                    user=user, doc_type=doc_type,
+                    defaults={
+                        "can_approve": bool(item.get("value", False)),
+                        "granted_by": request.user,
+                    },
+                )
 
         log_security_event("USER_CREATED", user=request.user, ip=get_client_ip(request),
                            extra=f"created_user={user.username}")
@@ -570,7 +591,30 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
         if not is_full_admin(self.request.user):
             serializer.validated_data.pop("organization", None)
             serializer.validated_data.pop("is_org_admin", None)
+
+        approver_doc_types = serializer.validated_data.pop("approver_doc_types", None)
+
         user = serializer.save()
+
+        # İmzalama / Təsdiq (2-ci mərhələ, MSN) hüquqları - redaktə zamanı göndərilibsə tam
+        # siyahı kimi qəbul edilir (hər doc_type üçün true/false), köhnə vəziyyət üzərinə yazılır.
+        if approver_doc_types is not None:
+            from workflow.models import ApproverPermission
+            from licenses.field_schema import DOC_TYPES
+
+            valid_doc_types = dict(DOC_TYPES)
+            for item in approver_doc_types:
+                doc_type = item.get("doc_type")
+                if doc_type not in valid_doc_types:
+                    continue
+                ApproverPermission.objects.update_or_create(
+                    user=user, doc_type=doc_type,
+                    defaults={
+                        "can_approve": bool(item.get("value", False)),
+                        "granted_by": self.request.user,
+                    },
+                )
+
         log_security_event(
             "ADMIN_USER_UPDATED", user=self.request.user, ip=get_client_ip(self.request),
             extra=f"target={user.username} is_active={user.is_active}",

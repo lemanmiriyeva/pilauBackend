@@ -149,6 +149,18 @@ class DocumentWorkflowConfig(models.Model):
         default=True,
     )
 
+    # Sənədi son olaraq (SİMA / Asan İmza ilə) imzalayacaq konkret şəxs. Seçim siyahısı
+    # eligible_users ilə eynidir (bax _eligible_msn_users) - yəni bu kateqoriya üzrə təsdiq
+    # (ApproverPermission) hüququ olan istifadəçilər. Məcburi deyil: boş qala bilər.
+    signer_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="İmzalayan şəxs",
+    )
+
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

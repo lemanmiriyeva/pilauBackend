@@ -29,6 +29,7 @@ class WorkflowConfigUpdateSerializer(serializers.Serializer):
     stage1_user = serializers.IntegerField(required=False, allow_null=True)
     stage2_enabled = serializers.BooleanField(required=False, default=True)
     stage2_user = serializers.IntegerField(required=False, allow_null=True)
+    signer_user = serializers.IntegerField(required=False, allow_null=True)
     organization_stage1_approvers = OrganizationStage1ApproverEntrySerializer(many=True, required=False, default=list)
 
     def validate(self, attrs):

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -85,15 +86,30 @@ class AuthorizedPerson(models.Model):
 
 
 class OrganizationDepartment(models.Model):
+    """Təşkilatın departamentləri. 'parent' ilə iyerarxiya qurula bilər (məsələn 'İnformasiya
+    Texnologiyaları Departamenti' daxilində 'Şəbəkə Strukturu' və 'Proqram Təminatı Strukturu'
+    kimi alt-bölmələr) - hər alt-bölmənin öz müdiri ('head') ola bilər."""
     organization = models.ForeignKey(
         "Organization",
         on_delete=models.CASCADE,
         related_name="departments",
     )
+    parent = models.ForeignKey(
+        "self", null=True, blank=True,
+        on_delete=models.CASCADE, related_name="children",
+        verbose_name="Ana departament",
+        help_text="Boş buraxılsa, bu ali (top-level) departamentdir. Seçilsə, bu, həmin "
+                  "departamentin daxili strukturu/bölməsidir.",
+    )
+    head = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+        verbose_name="Müdir",
+    )
     name = models.CharField(max_length=255)
 
     class Meta:
-        unique_together = ("organization", "name")
+        unique_together = ("organization", "parent", "name")
         ordering = ["name"]
 
     def __str__(self):
@@ -102,15 +118,17 @@ class OrganizationDepartment(models.Model):
 
 class OrganizationPosition(models.Model):
     organization = models.ForeignKey(
-        "Organization",
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="positions"
+    )
+
+    department = models.ForeignKey(
+        OrganizationDepartment,
         on_delete=models.CASCADE,
         related_name="positions",
+        null=True,
+        blank=True
     )
+
     name = models.CharField(max_length=255)
-
-    class Meta:
-        unique_together = ("organization", "name")
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name

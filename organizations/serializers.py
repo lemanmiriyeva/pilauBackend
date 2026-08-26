@@ -16,20 +16,70 @@ class AuthorizedPersonSerializer(serializers.ModelSerializer):
 class OrganizationDepartmentSerializer(serializers.ModelSerializer):
     """İnzibatçı Paneli -> Departamentlər və Vəzifələr səhifəsi üçün (bax
     organizations/views.py -> OrganizationDepartmentViewSet). unique_together=(organization,
-    name) modeldə təyin olunduğu üçün DRF eyni təşkilatda təkrar ad üçün avtomatik xəta verir."""
+    parent, name) modeldə təyin olunduğu üçün DRF eyni departament daxilində təkrar ad üçün
+    avtomatik xəta verir (fərqli ana-departamentlərdə/təşkilatlarda eyni ad təkrarlana bilər).
+
+    QEYD: 'parent' unique_together-də iştirak etdiyi üçün DRF onu avtomatik MƏCBURİ sahəyə
+    çevirir (modeldə null=True/blank=True olsa belə - bu, DRF-in məlum bir davranışıdır: bir
+    UniqueTogetherValidator-a daxil olan bütün sahələr defolt required olur). Aşağıda əl ilə
+    'required=False, allow_null=True' göstərərək bunu ləğv edirik - əks halda ali (top-level)
+    departament yaratmaq mümkün olmurdu ("Bu sahə tələb edilir" xətası)."""
     organization_name = serializers.CharField(source="organization.full_name", read_only=True)
+    parent_name = serializers.CharField(source="parent.name", read_only=True, default=None)
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=OrganizationDepartment.objects.all(), required=False, allow_null=True, default=None,
+    )
+    head_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationDepartment
-        fields = ["id", "organization", "organization_name", "name"]
+        fields = [
+            "id", "organization", "organization_name",
+            "parent", "parent_name", "head", "head_name", "name",
+        ]
+
+    def get_head_name(self, obj):
+        if not obj.head_id:
+            return None
+        return f"{obj.head.first_name} {obj.head.last_name}".strip() or obj.head.username
+
+    def validate(self, attrs):
+        parent = attrs.get("parent") if "parent" in attrs else getattr(self.instance, "parent", None)
+        organization = attrs.get("organization") or getattr(self.instance, "organization", None)
+        if parent and organization and parent.organization_id != organization.id:
+            raise serializers.ValidationError(
+                {"parent": "Ana departament eyni təşkilata aid olmalıdır."}
+            )
+        if self.instance and parent_id_equals_self(self.instance, parent):
+            raise serializers.ValidationError({"parent": "Departament öz-özünün ana departamenti ola bilməz."})
+        return attrs
+
+
+def parent_id_equals_self(instance, parent):
+    return bool(parent) and parent.id == instance.id
 
 
 class OrganizationPositionSerializer(serializers.ModelSerializer):
-    organization_name = serializers.CharField(source="organization.full_name", read_only=True)
+    organization_name = serializers.CharField(
+        source="organization.full_name",
+        read_only=True
+    )
+
+    department_name = serializers.CharField(
+        source="department.name",
+        read_only=True
+    )
 
     class Meta:
         model = OrganizationPosition
-        fields = ["id", "organization", "organization_name", "name"]
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "department",
+            "department_name",
+            "name",
+        ]
 
 
 class OrganizationListSerializer(serializers.ModelSerializer):
@@ -54,12 +104,21 @@ class OrganizationSummarySerializer(serializers.ModelSerializer):
 
 
 class OrganizationTableSerializer(serializers.ModelSerializer):
-    """Təşkilatlar siyahısı (list) üçün - səlahiyyətli şəxs sayı ilə birlikdə."""
-    authorized_person_count = serializers.IntegerField(read_only=True, default=0)
+    authorized_person_count = serializers.IntegerField(read_only=True)
+    user_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Organization
-        fields = ["id", "full_name", "code", "voen", "is_active", "authorized_person_count", "created_at"]
+        fields = [
+            "id",
+            "full_name",
+            "code",
+            "voen",
+            "is_active",
+            "authorized_person_count",
+            "user_count",
+            "created_at",
+        ]
 
 
 class OrganizationReportCardSerializer(serializers.ModelSerializer):

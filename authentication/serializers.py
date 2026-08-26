@@ -192,6 +192,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     """
     password = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
     modules = serializers.ListField(child=serializers.DictField(), required=False, write_only=True)
+    approver_doc_types = serializers.ListField(child=serializers.DictField(), required=False, write_only=True)
 
     class Meta:
         model = User
@@ -211,6 +212,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
             "is_org_admin",
             "password",
             "modules",
+            "approver_doc_types",
         ]
 
     def validate_password(self, value):
@@ -247,6 +249,8 @@ class UserAdminUpdateSerializer(serializers.ModelSerializer):
     amma onları başqa təşkilata köçürə və ya özünə/başqasına 'qurum admini' statusu verə bilməz
     (bax: authentication/views.py -> UserAdminDetailView.perform_update)."""
 
+    approver_doc_types = serializers.ListField(child=serializers.DictField(), required=False, write_only=True)
+
     class Meta:
         model = User
         fields = [
@@ -262,6 +266,7 @@ class UserAdminUpdateSerializer(serializers.ModelSerializer):
             "id_card_serial",
             "is_org_admin",
             "is_active",
+            "approver_doc_types",
         ]
         extra_kwargs = {field: {"required": False} for field in [
             "first_name", "last_name", "email", "phone", "organization",
