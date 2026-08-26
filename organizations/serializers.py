@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AuthorizedPerson, Organization
+from .models import AuthorizedPerson, Organization, OrganizationDepartment, OrganizationPosition
 
 
 class AuthorizedPersonSerializer(serializers.ModelSerializer):
@@ -11,6 +11,25 @@ class AuthorizedPersonSerializer(serializers.ModelSerializer):
             "fin_kod", "department", "position", "email", "phone",
         ]
         extra_kwargs = {"organization": {"required": False}}
+
+
+class OrganizationDepartmentSerializer(serializers.ModelSerializer):
+    """İnzibatçı Paneli -> Departamentlər və Vəzifələr səhifəsi üçün (bax
+    organizations/views.py -> OrganizationDepartmentViewSet). unique_together=(organization,
+    name) modeldə təyin olunduğu üçün DRF eyni təşkilatda təkrar ad üçün avtomatik xəta verir."""
+    organization_name = serializers.CharField(source="organization.full_name", read_only=True)
+
+    class Meta:
+        model = OrganizationDepartment
+        fields = ["id", "organization", "organization_name", "name"]
+
+
+class OrganizationPositionSerializer(serializers.ModelSerializer):
+    organization_name = serializers.CharField(source="organization.full_name", read_only=True)
+
+    class Meta:
+        model = OrganizationPosition
+        fields = ["id", "organization", "organization_name", "name"]
 
 
 class OrganizationListSerializer(serializers.ModelSerializer):

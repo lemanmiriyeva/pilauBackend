@@ -5,15 +5,17 @@ from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Organization
+from .models import Organization, OrganizationDepartment, OrganizationPosition
 from .permissions import IsFullAdminForCreate, IsStaffOrOrgAdminForWrite, is_full_admin, scoped_organization_ids
 from .serializers import (
+    OrganizationDepartmentSerializer,
     OrganizationDetailSerializer,
     OrganizationListSerializer,
+    OrganizationPositionSerializer,
     OrganizationReportCardSerializer,
     OrganizationSummarySerializer,
     OrganizationTableSerializer,
@@ -216,3 +218,49 @@ class OrganizationStatsView(APIView):
             "series": series,
             "documents": documents,
         })
+
+
+class OrganizationDepartmentViewSet(viewsets.ModelViewSet):
+    """İnzibatçı Paneli -> Departamentlər və Vəzifələr səhifəsi (bax authentication/views.py
+    -> MyOrganizationOptionsView, hansı ki, bu kataloqdan istifadəçinin öz təşkilatı üçün
+    seçim siyahısı çıxarır - Şəxsi Kabinet və istifadəçi formalarında).
+
+    Yalnız Nazirlik admini (staff/superuser) - qurum admini İnzibatçı Panelinə giriş etmir
+    (bax organizations/permissions.py və əvvəlki qərar: 'qurum admini istifadəçiləri idarə
+    etməsin' eyni məntiqlə bura da şamil edilir).
+
+    GET /api/organizations/departments/?organization=<id>&search=... - siyahı, filtrlənə bilər
+    POST/PATCH/DELETE - yaratma/redaktə/silmə
+    """
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = OrganizationDepartmentSerializer
+
+    def get_queryset(self):
+        qs = OrganizationDepartment.objects.select_related("organization").order_by(
+            "organization__full_name", "name"
+        )
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(name__icontains=search)
+        return qs
+
+
+class OrganizationPositionViewSet(viewsets.ModelViewSet):
+    """Bax OrganizationDepartmentViewSet - eyni qayda, 'Vəzifələr' üçün."""
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = OrganizationPositionSerializer
+
+    def get_queryset(self):
+        qs = OrganizationPosition.objects.select_related("organization").order_by(
+            "organization__full_name", "name"
+        )
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(name__icontains=search)
+        return qs
