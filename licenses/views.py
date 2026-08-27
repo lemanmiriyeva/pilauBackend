@@ -27,7 +27,12 @@ from licenses.serializers import (
     SignCertificateSerializer,
 )
 from workflow.models import DocumentWorkflowConfig, OrgReviewerPermission
-from workflow.notify import notify_certificate_ready, notify_stage1_reviewers, notify_stage2_reviewer
+from workflow.notify import (
+    notify_certificate_ready,
+    notify_certificate_signed,
+    notify_stage1_reviewers,
+    notify_stage2_reviewer,
+)
 
 FILE_FIELD_PREFIX = "file__"
 
@@ -176,6 +181,8 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
         certificate.signed_phone = data["phone"]
         certificate.signed_at = timezone.now()
         certificate.save(update_fields=["is_signed", "signature_method", "signed_phone", "signed_at"])
+
+        notify_certificate_signed(certificate.permit_document, certificate)
 
         return Response(LicenseCertificateSerializer(certificate).data)
 

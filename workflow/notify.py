@@ -112,3 +112,23 @@ def notify_certificate_ready(document, certificate) -> None:
 
     Notification.objects.create(recipient=recipient, title=title, body=body, link=link)
     _send_email_async(recipient.email, title, body)
+
+
+def notify_certificate_signed(document, certificate) -> None:
+    """Sertifikat SİM İmza / Asan İmza ilə imzalandıqda çağırılır (bax
+    licenses.views.LicenseCertificateView.sign) - müraciəti göndərən şəxsə (created_by)
+    sənədin artıq imzalandığını bildirir."""
+    recipient = document.created_by
+    if not recipient or not recipient.is_active:
+        return
+
+    method_label = certificate.get_signature_method_display() or "elektron imza"
+    title = f"Lisenziyanız imzalandı — {document.number}"
+    body = (
+        f"{document.get_doc_type_display()} kateqoriyasında {document.number} nömrəli "
+        f"sənədiniz {method_label} ilə imzalandı."
+    )
+    link = f"/lisenziya-icazeleri/sened/{certificate.id}"
+
+    Notification.objects.create(recipient=recipient, title=title, body=body, link=link)
+    _send_email_async(recipient.email, title, body)
