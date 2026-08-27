@@ -367,161 +367,152 @@ class Stage1PermissionsView(APIView):
 # STAGE 2 PERMISSIONS
 # ============================================================================
 
-class Stage2PermissionsView(APIView):
-    """
-    2-ci mərhələ - Təsdiq icazələri.
+def get(self, request):
 
-    GET:
+    # --------------------------------------------------------------------
+    # ORGANIZATION SCOPE
+    # --------------------------------------------------------------------
 
-        /api/workflow/stage2-permissions/
+    org_ids = scoped_organization_ids(request.user)
 
-    Optional:
+    organization_id = request.query_params.get("organization")
 
-        ?organization=<id>
+    # --------------------------------------------------------------------
+    # STAGE 1 USERS
+    # --------------------------------------------------------------------
 
-    POST:
+    stage1_users = (
+        User.objects
+        .filter(
+            is_active=True,
+            id__in=OrgReviewerPermission.objects.filter(
+                can_review=True
+            ).values_list("user_id", flat=True)
+        )
+        .select_related(
+            "department",
+            "position",
+            "organization",
+        )
+        .order_by(
+            "first_name",
+            "last_name",
+            "username",
+        )
+    )
 
-        {
-            "user": 5,
-            "doc_type": "istehsal",
-            "value": true
-        }
-    """
-
-    permission_classes = [
-        IsStaffOrOrgAdmin
-    ]
-
-    doc_type_keys = [
-        k for k, _ in DOC_TYPES
-    ]
-
-    # ------------------------------------------------------------------------
-    # GET
-    # ------------------------------------------------------------------------
-
-    def get(self, request):
-
-        # --------------------------------------------------------------------
-        # USERS
-        # --------------------------------------------------------------------
-
-        users = (
-            User.objects
-            .filter(
-                is_active=True
-            )
-            .select_related(
-                "department",
-                "position",
-                "organization",
-            )
-            .order_by(
-                "first_name",
-                "last_name",
-                "username",
-            )
+    # organization scope
+    if org_ids is not None:
+        stage1_users = stage1_users.filter(
+            organization_id__in=org_ids
         )
 
-        # --------------------------------------------------------------------
-        # ORGANIZATION SCOPE (adi qurum admini yalnız öz təşkilatının işçilərini görür)
-        # --------------------------------------------------------------------
-
-        org_ids = scoped_organization_ids(request.user)
-        if org_ids is not None:
-            users = users.filter(organization_id__in=org_ids)
-
-        # --------------------------------------------------------------------
-        # ORGANIZATION FILTER
-        # --------------------------------------------------------------------
-
-        organization_id = request.query_params.get(
-            "organization"
+    if organization_id:
+        stage1_users = stage1_users.filter(
+            organization_id=organization_id
         )
 
-        if organization_id:
-            users = users.filter(
-                organization_id=organization_id
-            )
+    # --------------------------------------------------------------------
+    # STAGE 1 PERMISSIONS
+    # --------------------------------------------------------------------
 
-        # --------------------------------------------------------------------
-        # PERMISSIONS
-        # --------------------------------------------------------------------
+    stage1_rows = (
+        OrgReviewerPermission.objects
+        .filter(
+            can_review=True,
+            user__in=stage1_users,
+        )
+    )
 
-        rows = (
-            ApproverPermission.objects
-            .filter(
+    stage1_permissions_by_user = {}
+
+    for row in stage1_rows:
+        stage1_permissions_by_user.setdefault(
+            row.user_id,
+            {}
+        )[row.doc_type] = True
+
+    # --------------------------------------------------------------------
+    # STAGE 2 USERS
+    # --------------------------------------------------------------------
+
+    stage2_users = (
+        User.objects
+        .filter(
+            is_active=True,
+            id__in=ApproverPermission.objects.filter(
                 can_approve=True
+            ).values_list("user_id", flat=True)
+        )
+        .select_related(
+            "department",
+            "position",
+            "organization",
+        )
+        .order_by(
+            "first_name",
+            "last_name",
+            "username",
+        )
+    )
+
+    # organization scope
+    if org_ids is not None:
+        stage2_users = stage2_users.filter(
+            organization_id__in=org_ids
+        )
+
+    if organization_id:
+        stage2_users = stage2_users.filter(
+            organization_id=organization_id
+        )
+
+    # --------------------------------------------------------------------
+    # STAGE 2 PERMISSIONS
+    # --------------------------------------------------------------------
+
+    stage2_rows = (
+        ApproverPermission.objects
+        .filter(
+            can_approve=True,
+            user__in=stage2_users,
+        )
+    )
+
+    stage2_permissions_by_user = {}
+
+    for row in stage2_rows:
+        stage2_permissions_by_user.setdefault(
+            row.user_id,
+            {}
+        )[row.doc_type] = True
+
+    # --------------------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------------------
+
+    return Response({
+
+        "doc_types": DOC_TYPES_PAYLOAD,
+
+        "stage1_users": [
+            _user_row(
+                user,
+                stage1_permissions_by_user,
+                self.doc_type_keys,
             )
-        )
+            for user in stage1_users
+        ],
 
-        permissions_by_user = {}
-
-        for row in rows:
-            permissions_by_user.setdefault(
-                row.user_id,
-                {}
-            )[row.doc_type] = True
-
-        # --------------------------------------------------------------------
-        # RESPONSE
-        # --------------------------------------------------------------------
-
-        return Response({
-
-            "doc_types": DOC_TYPES_PAYLOAD,
-
-            "users": [
-                _user_row(
-                    user,
-                    permissions_by_user,
-                    self.doc_type_keys,
-                )
-                for user in users
-            ],
-        })
-
-    # ------------------------------------------------------------------------
-    # POST
-    # ------------------------------------------------------------------------
-
-    def post(self, request):
-
-        serializer = PermissionToggleSerializer(
-            data=request.data
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
-
-        data = serializer.validated_data
-
-        target_user = get_object_or_404(
-            User,
-            pk=data["user"]
-        )
-
-        org_ids = scoped_organization_ids(request.user)
-        if org_ids is not None and target_user.organization_id not in org_ids:
-            return Response(
-                {"detail": "Bu istifadəçi üçün icazə verə bilməzsiniz."},
-                status=status.HTTP_403_FORBIDDEN,
+        "stage2_users": [
+            _user_row(
+                user,
+                stage2_permissions_by_user,
+                self.doc_type_keys,
             )
-
-        ApproverPermission.objects.update_or_create(
-            user=target_user,
-            doc_type=data["doc_type"],
-            defaults={
-                "can_approve": data["value"],
-                "granted_by": request.user,
-            },
-        )
-
-        return Response({
-            "detail": "Yadda saxlanıldı."
-        })
-
+            for user in stage2_users
+        ],
+    })
 
 # ============================================================================
 # APPROVERS LIST
