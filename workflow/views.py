@@ -205,7 +205,184 @@ def _resolve_organization_for_org_admin_screen(request):
 # ============================================================================
 # STAGE 1 PERMISSIONS
 # ============================================================================
+# ============================================================================
+# STAGE 1 PERMISSIONS
+# ============================================================================
 
+class Stage1PermissionsView(APIView):
+
+    permission_classes = [
+        IsStaffOrOrgAdmin
+    ]
+
+    doc_type_keys = [
+        key for key, _ in DOC_TYPES
+    ]
+
+    def get(self, request):
+
+        organization_id = request.query_params.get(
+            "organization"
+        )
+
+        if not organization_id:
+            return Response(
+                {
+                    "detail": "organization parametri tələb olunur."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        organization = get_object_or_404(
+            Organization,
+            pk=organization_id
+        )
+
+        # ------------------------------------------------------------
+        # USERLƏR
+        # ------------------------------------------------------------
+
+        users = (
+            User.objects
+            .filter(
+                organization=organization,
+                is_active=True,
+            )
+            .filter(
+                id__in=OrgReviewerPermission.objects.filter(
+                    organization=organization,
+                    can_review=True,
+                ).values_list(
+                    "user_id",
+                    flat=True,
+                )
+            )
+            .select_related(
+                "department",
+                "position",
+                "organization",
+            )
+            .order_by(
+                "first_name",
+                "last_name",
+                "username",
+            )
+            .distinct()
+        )
+
+        # ------------------------------------------------------------
+        # İCAZƏTLƏR
+        # ------------------------------------------------------------
+
+        rows = (
+            OrgReviewerPermission.objects
+            .filter(
+                organization=organization,
+                can_review=True,
+                user__in=users,
+            )
+        )
+
+        permissions_by_user = {}
+
+        for row in rows:
+
+            permissions_by_user.setdefault(
+                row.user_id,
+                {}
+            )[row.doc_type] = True
+
+        # ------------------------------------------------------------
+        # RESPONSE
+        # ------------------------------------------------------------
+
+        return Response({
+
+            "organization": {
+                "id": organization.id,
+                "full_name": organization.full_name,
+            },
+
+            "doc_types": DOC_TYPES_PAYLOAD,
+
+            "users": [
+                _user_row(
+                    user,
+                    permissions_by_user,
+                    self.doc_type_keys,
+                )
+                for user in users
+            ],
+        })
+
+    # ------------------------------------------------------------------------
+    # POST
+    # ------------------------------------------------------------------------
+
+    def post(self, request):
+
+        organization_id = request.data.get(
+            "organization"
+        )
+
+        if not organization_id:
+            return Response(
+                {
+                    "detail": "organization parametri tələb olunur."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        organization = get_object_or_404(
+            Organization,
+            pk=organization_id
+        )
+
+        serializer = PermissionToggleSerializer(
+            data=request.data
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        data = serializer.validated_data
+
+        # ------------------------------------------------------------
+        # USER
+        # ------------------------------------------------------------
+
+        target_user = get_object_or_404(
+            User,
+            pk=data["user"],
+            organization=organization,
+            is_active=True,
+        )
+
+        # ------------------------------------------------------------
+        # İCAZƏTİ YARAT / DƏYİŞ
+        # ------------------------------------------------------------
+
+        OrgReviewerPermission.objects.update_or_create(
+
+            organization=organization,
+
+            user=target_user,
+
+            doc_type=data["doc_type"],
+
+            defaults={
+
+                "can_review": data["value"],
+
+                "granted_by": request.user,
+
+            },
+        )
+
+        return Response({
+            "detail": "Yadda saxlanıldı."
+        })
 # ============================================================================
 # STAGE 1 + STAGE 2 PERMISSIONS
 # ============================================================================
