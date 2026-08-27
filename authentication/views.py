@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 import pyotp
 
-from organizations.permissions import is_full_admin
+from organizations.permissions import IsStaffOrOrgAdmin, is_full_admin, scoped_organization_ids
 
 from .models import PasswordResetCode, TOTPResetCode, User
 from .serializers import (
@@ -539,11 +539,10 @@ class CreateUserView(APIView):
 class UserListView(generics.ListAPIView):
     """İnzibatçı Paneli -> İstifadəçilər siyahısı (Image 2).
 
-    YALNIZ Nazirlik admini (is_staff/is_superuser) - qurum admininin BURAYA girişi YOXDUR.
-    Qurum admininin öz təşkilatının işçilərinə ehtiyacı olan yeganə yer 'Qurum yoxlaması
-    icazələri' ekranıdır (bax workflow.views.Stage1PermissionsView) - o, tamamilə ayrı,
-    məhdud (yalnız ad/departament/mövcud icazələr) endpoint-dir, istifadəçi idarəetməsi deyil."""
-    permission_classes = [IsAdminUser]
+    Nazirlik admini (is_staff/is_superuser), MSN-in öz admini və 'rəhbər kadr' bayrağı olan
+    istifadəçilər - BÜTÜN təşkilatların işçilərini görür. Adi qurum admini isə YALNIZ öz
+    təşkilatının (və alt-təşkilatlarının) işçilərini görür (bax scoped_organization_ids)."""
+    permission_classes = [IsStaffOrOrgAdmin]
     serializer_class = UserListSerializer
 
     def get_queryset(self):
@@ -556,6 +555,9 @@ class UserListView(generics.ListAPIView):
             "last_name",
             "username"
         )
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
         organization_id = self.request.query_params.get("organization")
         search = self.request.query_params.get("search")
         if organization_id:
@@ -571,16 +573,20 @@ class UserListView(generics.ListAPIView):
 class UserAdminDetailView(generics.RetrieveUpdateAPIView):
     """İnzibatçı Paneli -> İstifadəçi redaktəsi və status (Aktiv/Deaktiv) dəyişimi (Image 2).
 
-    YALNIZ Nazirlik admini (is_staff/is_superuser) - istifadəçi idarəetməsi artıq qurum
-    admininə açıq deyil (bax UserListView qeydi)."""
-    permission_classes = [IsAdminUser]
+    Bax UserListView - eyni görünürlük qaydası (scoped_organization_ids). Qurum admini yalnız
+    öz əhatəsindəki istifadəçiləri görə/redaktə edə bilər (obyekt bu əhatədən kənardırsa 404)."""
+    permission_classes = [IsStaffOrOrgAdmin]
 
     def get_queryset(self):
-        return User.objects.select_related(
+        qs = User.objects.select_related(
             "organization",
             "department",
             "position",
         )
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
+        return qs
 
     def get_serializer_class(self):
         if self.request.method in ("PATCH", "PUT"):
@@ -591,6 +597,7 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
         if not is_full_admin(self.request.user):
             serializer.validated_data.pop("organization", None)
             serializer.validated_data.pop("is_org_admin", None)
+            serializer.validated_data.pop("rehber_kadr", None)
 
         approver_doc_types = serializer.validated_data.pop("approver_doc_types", None)
 

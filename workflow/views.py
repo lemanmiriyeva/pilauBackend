@@ -8,8 +8,10 @@ from rest_framework.views import APIView
 from licenses.field_schema import DOC_TYPES
 
 from organizations.permissions import (
+    IsStaffOrOrgAdmin,
     is_full_admin,
     is_org_admin,
+    scoped_organization_ids,
 )
 
 from organizations.models import Organization
@@ -387,7 +389,7 @@ class Stage2PermissionsView(APIView):
     """
 
     permission_classes = [
-        permissions.IsAdminUser
+        IsStaffOrOrgAdmin
     ]
 
     doc_type_keys = [
@@ -420,6 +422,14 @@ class Stage2PermissionsView(APIView):
                 "username",
             )
         )
+
+        # --------------------------------------------------------------------
+        # ORGANIZATION SCOPE (adi qurum admini yalnız öz təşkilatının işçilərini görür)
+        # --------------------------------------------------------------------
+
+        org_ids = scoped_organization_ids(request.user)
+        if org_ids is not None:
+            users = users.filter(organization_id__in=org_ids)
 
         # --------------------------------------------------------------------
         # ORGANIZATION FILTER
@@ -491,6 +501,13 @@ class Stage2PermissionsView(APIView):
             User,
             pk=data["user"]
         )
+
+        org_ids = scoped_organization_ids(request.user)
+        if org_ids is not None and target_user.organization_id not in org_ids:
+            return Response(
+                {"detail": "Bu istifadəçi üçün icazə verə bilməzsiniz."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         ApproverPermission.objects.update_or_create(
             user=target_user,
@@ -716,6 +733,9 @@ class Stage1OrganizationUsersView(APIView):
             Organization.objects
             .filter(
                 is_active=True
+            )
+            .exclude(
+                code=Organization.CODE_MSN
             )
             .order_by(
                 "full_name"

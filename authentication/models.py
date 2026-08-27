@@ -17,7 +17,7 @@ class User(AbstractUser):
     # QEYD: bu iki sahə serializers.py-də (UserSerializer, SelfProfileUpdateSerializer və s.)
     # artıq istifadə olunurdu, amma modeldə yox idi - bu, /api/auth/me/ və bir çox istifadəçi
     # endpoint-ini "field department is not defined on model" xətası ilə sındırırdı. Bərpa edildi.
-  
+
     # Qurum admini: is_staff (MSN inzibatçısı) olmadan, yalnız öz təşkilatı (+ alt-təşkilatları)
     # daxilində - Lisenziya/icazə sənədləri, Təşkilatlar və İstifadəçilər modullarında - tam
     # görünürlük və redaktə icazəsi verir. Bax: organizations/permissions.py, licenses/views.py,
@@ -54,6 +54,11 @@ class User(AbstractUser):
     )
 
     is_org_admin = models.BooleanField("Qurum admini", default=False)
+
+    # Rəhbər kadr: hansı təşkilata aid olmasından asılı olmayaraq, bütün modullarda BÜTÜN
+    # təşkilatların datasını görə bilir (MSN admini/superuser ilə eyni geniş görünürlük,
+    # sadəcə fərqli bir yolla - bax organizations/permissions.py -> can_view_all_organizations).
+    rehber_kadr = models.BooleanField("Rəhbər kadr (bütün təşkilatları görə bilər)", default=False)
 
     # --- İlk giriş - admin tərəfindən yaradılan hər istifadəçi ilk dəfə daxil olduqda
     # şifrəni özü təyin etməlidir (kodsuz, birbaşa) ---

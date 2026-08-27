@@ -21,13 +21,33 @@ def is_org_admin(user) -> bool:
     return bool(user and user.is_authenticated and getattr(user, "is_org_admin", False))
 
 
+def is_msn_admin(user) -> bool:
+    """Öz təşkilatı Nazirliyin ÖZÜ (Organization.code == 'msn') olan qurum admini - adi qurum
+    admininin əksinə, bu şəxs BÜTÜN təşkilatların datasını görə bilməlidir (MSN-in daxili
+    strukturu, tək bir 'qurum'a aid deyil)."""
+    if not is_org_admin(user):
+        return False
+    org = getattr(user, "organization", None)
+    return bool(org and org.code == org.CODE_MSN)
+
+
+def can_view_all_organizations(user) -> bool:
+    """Bütün təşkilatların datasını (lisenziyalar, hesabatlar, istifadəçilər, departament/vəzifə,
+    təsdiq icazələri və s.) görə bilən istifadəçidirmi? Üç yoldan biri kifayətdir:
+    - Nazirlik admini (is_staff/is_superuser)
+    - MSN təşkilatının öz admini (is_msn_admin)
+    - 'Rəhbər kadr' bayrağı aktiv olan istənilən istifadəçi (bax User.rehber_kadr)
+    """
+    return bool(is_full_admin(user) or is_msn_admin(user) or getattr(user, "rehber_kadr", False))
+
+
 def scoped_organization_ids(user):
     """İstifadəçinin baxa biləcəyi təşkilat id-lərinin siyahısı.
 
-    Tam admin üçün None qaytarılır (= filtr tətbiq olunmasın, hər şey görünsün).
-    Təşkilatı olmayan istifadəçi üçün boş siyahı (heç nə görünmür).
+    can_view_all_organizations(user) True olduqda None qaytarılır (= filtr tətbiq olunmasın,
+    hər şey görünsün). Təşkilatı olmayan istifadəçi üçün boş siyahı (heç nə görünmür).
     """
-    if is_full_admin(user):
+    if can_view_all_organizations(user):
         return None
     if not getattr(user, "organization_id", None):
         return []

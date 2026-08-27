@@ -173,6 +173,7 @@ class UserListSerializer(serializers.ModelSerializer):
             "fin_kod",
             "id_card_serial",
             "is_org_admin",
+            "rehber_kadr",
             "is_active",
             "is_locked",
             "date_joined",
@@ -210,6 +211,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
             "fin_kod",
             "id_card_serial",
             "is_org_admin",
+            "rehber_kadr",
             "password",
             "modules",
             "approver_doc_types",
@@ -265,12 +267,13 @@ class UserAdminUpdateSerializer(serializers.ModelSerializer):
             "fin_kod",
             "id_card_serial",
             "is_org_admin",
+            "rehber_kadr",
             "is_active",
             "approver_doc_types",
         ]
         extra_kwargs = {field: {"required": False} for field in [
             "first_name", "last_name", "email", "phone", "organization",
-            "fin_kod", "id_card_serial", "is_org_admin", "is_active",
+            "fin_kod", "id_card_serial", "is_org_admin", "rehber_kadr", "is_active",
         ]}
 
     def validate(self, attrs):

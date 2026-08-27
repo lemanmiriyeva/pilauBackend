@@ -9,7 +9,7 @@ class Organization(models.Model):
     CODE_OTHER = "other"
     CODE_CHOICES = [
         (CODE_MSN, "Müdafiə Sənayesi Nazirliyi"),
-        (CODE_OTHER, "Digər"),
+        (CODE_OTHER, "Qurum"),
     ]
 
     # Təşkilatın növünü ayırmaq üçün (MSN - nazirliyin özü, digər - bütün digər hüquqi şəxslər).

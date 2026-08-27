@@ -10,7 +10,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Organization, OrganizationDepartment, OrganizationPosition
-from .permissions import IsFullAdminForCreate, IsStaffOrOrgAdminForWrite, is_full_admin, scoped_organization_ids
+from .permissions import (
+    IsFullAdminForCreate,
+    IsStaffOrOrgAdmin,
+    IsStaffOrOrgAdminForWrite,
+    is_full_admin,
+    scoped_organization_ids,
+)
 from .serializers import (
     OrganizationDepartmentSerializer,
     OrganizationDetailSerializer,
@@ -237,20 +243,24 @@ class OrganizationDepartmentViewSet(viewsets.ModelViewSet):
     -> MyOrganizationOptionsView, hansı ki, bu kataloqdan istifadəçinin öz təşkilatı üçün
     seçim siyahısı çıxarır - Şəxsi Kabinet və istifadəçi formalarında).
 
-    Yalnız Nazirlik admini (staff/superuser) - qurum admini İnzibatçı Panelinə giriş etmir
-    (bax organizations/permissions.py və əvvəlki qərar: 'qurum admini istifadəçiləri idarə
-    etməsin' eyni məntiqlə bura da şamil edilir).
+    Nazirlik admini/MSN admini/rəhbər kadr - bütün təşkilatların kataloqunu görür. Adi qurum
+    admini isə YALNIZ öz təşkilatının (və alt-təşkilatlarının) departament/vəzifələrini görə
+    və idarə edə bilər (bax scoped_organization_ids) - ?organization= ilə əhatədən kənar
+    təşkilat sorğulasa belə, nəticə boş qalır (kəsişmə filtri).
 
     GET /api/organizations/departments/?organization=<id>&search=... - siyahı, filtrlənə bilər
     POST/PATCH/DELETE - yaratma/redaktə/silmə
     """
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsStaffOrOrgAdmin]
     serializer_class = OrganizationDepartmentSerializer
 
     def get_queryset(self):
         qs = OrganizationDepartment.objects.select_related("organization", "parent", "head").order_by(
             "organization__full_name", "name"
         )
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -269,7 +279,8 @@ class OrganizationDepartmentViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationPositionViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAdminUser]
+    """Bax OrganizationDepartmentViewSet - eyni görünürlük qaydası (scoped_organization_ids)."""
+    permission_classes = [IsStaffOrOrgAdmin]
     serializer_class = OrganizationPositionSerializer
 
     def get_queryset(self):
@@ -281,6 +292,10 @@ class OrganizationPositionViewSet(viewsets.ModelViewSet):
             "department__name",
             "name",
         )
+
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None:
+            qs = qs.filter(organization_id__in=org_ids)
 
         organization_id = self.request.query_params.get("organization")
         department_id = self.request.query_params.get("department")
