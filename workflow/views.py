@@ -206,181 +206,11 @@ def _resolve_organization_for_org_admin_screen(request):
 # STAGE 1 PERMISSIONS
 # ============================================================================
 
-class Stage1PermissionsView(APIView):
-    """
-    1-ci mərhələ - Qurum yoxlaması icazələri.
-
-    GET:
-
-        /api/workflow/stage1-permissions/?organization=<id>
-
-    POST:
-
-        {
-            "organization": 1,
-            "user": 5,
-            "doc_type": "istehsal",
-            "value": true
-        }
-    """
-
-    permission_classes = [
-        permissions.IsAuthenticated
-    ]
-
-    doc_type_keys = [
-        k for k, _ in DOC_TYPES
-    ]
-
-    # ------------------------------------------------------------------------
-    # ORGANIZATION
-    # ------------------------------------------------------------------------
-
-    def _resolve_organization(self, request):
-
-        return _resolve_organization_for_org_admin_screen(
-            request
-        )
-
-    # ------------------------------------------------------------------------
-    # GET
-    # ------------------------------------------------------------------------
-
-    def get(self, request):
-
-        organization, error = self._resolve_organization(
-            request
-        )
-
-        if error:
-            return error
-
-        # --------------------------------------------------------------------
-        # USERS
-        # --------------------------------------------------------------------
-
-        users = (
-            User.objects
-            .filter(
-                organization=organization,
-                is_active=True,
-            )
-            .select_related(
-                "department",
-                "position",
-            )
-            .order_by(
-                "first_name",
-                "last_name",
-                "username",
-            )
-        )
-
-        # --------------------------------------------------------------------
-        # PERMISSIONS
-        # --------------------------------------------------------------------
-
-        rows = (
-            OrgReviewerPermission.objects
-            .filter(
-                organization=organization,
-                can_review=True,
-            )
-        )
-
-        permissions_by_user = {}
-
-        for row in rows:
-            permissions_by_user.setdefault(
-                row.user_id,
-                {}
-            )[row.doc_type] = True
-
-        # --------------------------------------------------------------------
-        # RESPONSE
-        # --------------------------------------------------------------------
-
-        return Response({
-
-            "organization": {
-                "id": organization.id,
-                "full_name": organization.full_name,
-            },
-
-            "doc_types": DOC_TYPES_PAYLOAD,
-
-            "users": [
-                _user_row(
-                    user,
-                    permissions_by_user,
-                    self.doc_type_keys,
-                )
-                for user in users
-            ],
-        })
-
-    # ------------------------------------------------------------------------
-    # POST
-    # ------------------------------------------------------------------------
-
-    def post(self, request):
-
-        organization, error = self._resolve_organization(
-            request
-        )
-
-        if error:
-            return error
-
-        serializer = PermissionToggleSerializer(
-            data=request.data
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
-
-        data = serializer.validated_data
-
-        target_user = get_object_or_404(
-            User,
-            pk=data["user"],
-            organization=organization,
-        )
-
-        OrgReviewerPermission.objects.update_or_create(
-            organization=organization,
-            user=target_user,
-            doc_type=data["doc_type"],
-            defaults={
-                "can_review": data["value"],
-                "granted_by": request.user,
-            },
-        )
-
-        return Response({
-            "detail": "Yadda saxlanıldı."
-        })
-
-
 # ============================================================================
-# STAGE 2 PERMISSIONS
-# ============================================================================
-
-# ============================================================================
-# STAGE 2 PERMISSIONS
+# STAGE 1 + STAGE 2 PERMISSIONS
 # ============================================================================
 
 class Stage2PermissionsView(APIView):
-    """
-    1-ci və 2-ci mərhələ icazələrini ayrı-ayrılıqda qaytarır.
-
-    stage1_users:
-        OrgReviewerPermission.can_review=True olan istifadəçilər
-
-    stage2_users:
-        ApproverPermission.can_approve=True olan istifadəçilər
-    """
 
     permission_classes = [
         IsStaffOrOrgAdmin
@@ -409,63 +239,124 @@ class Stage2PermissionsView(APIView):
         )
 
         # ====================================================================
-        # ORGANIZATION FILTER
+        # ORGANIZATIONS
         # ====================================================================
 
-        # Əgər konkret organization göndərilibsə,
-        # həmin organization-a görə filter edirik.
-        #
-        # Qurum admini onsuz da scoped_organization_ids()
-        # vasitəsilə öz təşkilatında qalır.
-        #
-        # Nazirlik admini isə organization göndərməsə,
-        # bütün scope-dakı təşkilatları görə bilər.
+        organizations = (
+            Organization.objects
+            .filter(
+                is_active=True
+            )
+            .order_by(
+                "full_name"
+            )
+        )
 
-        organization_filter = {}
+        # Nazirlik admini -> bütün təşkilatlar
+        if org_ids is None:
 
-        if org_ids is not None:
-            organization_filter[
-                "organization_id__in"
-            ] = org_ids
+            allowed_organizations = organizations
+
+        # Qurum admini -> yalnız öz təşkilatı
+        else:
+
+            allowed_organizations = (
+                organizations
+                .filter(
+                    id__in=org_ids
+                )
+            )
+
+        # ====================================================================
+        # SELECTED ORGANIZATION
+        # ====================================================================
+
+        selected_organization = None
 
         if organization_id:
 
-            # Nazirlik admini üçün konkret təşkilat seçilibsə
-            # həmin təşkilata baxılır.
+            try:
 
-            if (
-                org_ids is not None
-                and int(organization_id) not in org_ids
+                organization_id = int(
+                    organization_id
+                )
+
+            except (
+                TypeError,
+                ValueError,
             ):
+
                 return Response(
                     {
                         "detail": (
-                            "Bu təşkilat üzrə "
-                            "icazələrə baxmaq hüququnuz yoxdur."
+                            "organization düzgün "
+                            "göndərilməyib."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            selected_organization = (
+                allowed_organizations
+                .filter(
+                    id=organization_id
+                )
+                .first()
+            )
+
+            if not selected_organization:
+
+                return Response(
+                    {
+                        "detail": (
+                            "Bu təşkilata baxmaq "
+                            "hüququnuz yoxdur."
                         )
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            organization_filter = {
-                "organization_id": organization_id
-            }
-
         # ====================================================================
         # STAGE 1
         # ====================================================================
 
-        stage1_permission_qs = (
+        stage1_permissions = (
             OrgReviewerPermission.objects
             .filter(
-                can_review=True,
-                **organization_filter,
+                can_review=True
+            )
+            .select_related(
+                "user",
+                "organization",
             )
         )
 
-        # İcazəsi olan user ID-ləri
+        # Konkret təşkilat seçilibsə
+        if selected_organization:
+
+            stage1_permissions = (
+                stage1_permissions
+                .filter(
+                    organization=selected_organization
+                )
+            )
+
+        # Qurum admini üçün öz təşkilatı
+        elif org_ids is not None:
+
+            stage1_permissions = (
+                stage1_permissions
+                .filter(
+                    organization_id__in=org_ids
+                )
+            )
+
+        # ====================================================================
+        # STAGE 1 USER IDS
+        # ====================================================================
+
         stage1_user_ids = (
-            stage1_permission_qs
+            stage1_permissions
             .values_list(
                 "user_id",
                 flat=True,
@@ -501,41 +392,42 @@ class Stage2PermissionsView(APIView):
 
         stage1_permissions_by_user = {}
 
-        for row in stage1_permission_qs:
+        for permission in stage1_permissions:
 
             stage1_permissions_by_user.setdefault(
-                row.user_id,
+                permission.user_id,
                 {}
-            )[row.doc_type] = True
+            )[permission.doc_type] = True
 
         # ====================================================================
         # STAGE 2
         # ====================================================================
 
-        stage2_permission_qs = (
+        stage2_permissions = (
             ApproverPermission.objects
             .filter(
-                can_approve=True,
+                can_approve=True
+            )
+            .select_related(
+                "user",
             )
         )
 
-        # --------------------------------------------------------------------
-        # ORGANIZATION FILTER
-        # --------------------------------------------------------------------
+        # Konkret təşkilat seçilibsə
+        if selected_organization:
 
-        if organization_id:
-
-            stage2_permission_qs = (
-                stage2_permission_qs
+            stage2_permissions = (
+                stage2_permissions
                 .filter(
-                    user__organization_id=organization_id
+                    user__organization=selected_organization
                 )
             )
 
+        # Qurum admini üçün öz təşkilatı
         elif org_ids is not None:
 
-            stage2_permission_qs = (
-                stage2_permission_qs
+            stage2_permissions = (
+                stage2_permissions
                 .filter(
                     user__organization_id__in=org_ids
                 )
@@ -546,7 +438,7 @@ class Stage2PermissionsView(APIView):
         # ====================================================================
 
         stage2_user_ids = (
-            stage2_permission_qs
+            stage2_permissions
             .values_list(
                 "user_id",
                 flat=True,
@@ -582,12 +474,12 @@ class Stage2PermissionsView(APIView):
 
         stage2_permissions_by_user = {}
 
-        for row in stage2_permission_qs:
+        for permission in stage2_permissions:
 
             stage2_permissions_by_user.setdefault(
-                row.user_id,
+                permission.user_id,
                 {}
-            )[row.doc_type] = True
+            )[permission.doc_type] = True
 
         # ====================================================================
         # RESPONSE
@@ -595,10 +487,45 @@ class Stage2PermissionsView(APIView):
 
         return Response({
 
+            # ----------------------------------------------------------------
+            # ORGANIZATIONS
+            # ----------------------------------------------------------------
+
+            "organizations": [
+
+                {
+                    "id": organization.id,
+                    "full_name": organization.full_name,
+                }
+
+                for organization in allowed_organizations
+            ],
+
+            # ----------------------------------------------------------------
+            # SELECTED ORGANIZATION
+            # ----------------------------------------------------------------
+
+            "selected_organization": (
+
+                {
+                    "id": selected_organization.id,
+                    "full_name": (
+                        selected_organization.full_name
+                    ),
+                }
+
+                if selected_organization
+                else None
+            ),
+
+            # ----------------------------------------------------------------
+            # DOCUMENT TYPES
+            # ----------------------------------------------------------------
+
             "doc_types": DOC_TYPES_PAYLOAD,
 
             # ----------------------------------------------------------------
-            # 1-Cİ MƏRHƏLƏ
+            # STAGE 1
             # ----------------------------------------------------------------
 
             "stage1_users": [
@@ -613,7 +540,7 @@ class Stage2PermissionsView(APIView):
             ],
 
             # ----------------------------------------------------------------
-            # 2-Cİ MƏRHƏLƏ
+            # STAGE 2
             # ----------------------------------------------------------------
 
             "stage2_users": [
@@ -664,6 +591,7 @@ class Stage2PermissionsView(APIView):
             org_ids is not None
             and target_user.organization_id not in org_ids
         ):
+
             return Response(
                 {
                     "detail": (
@@ -675,7 +603,7 @@ class Stage2PermissionsView(APIView):
             )
 
         # ====================================================================
-        # SAVE
+        # SAVE STAGE 2 PERMISSION
         # ====================================================================
 
         ApproverPermission.objects.update_or_create(
