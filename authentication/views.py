@@ -498,10 +498,17 @@ class CreateUserView(APIView):
 
         for item in modules_data:
             module = Module.objects.filter(id=item.get("module")).first()
+
             if not module:
                 continue
+
+            # Qurum admini deyilsə İnzibatçı panelinə icazə verilə bilməz
+            if module.key == "inzibatci-paneli" and not user.is_org_admin:
+                continue
+
             UserModulePermission.objects.update_or_create(
-                user=user, module=module,
+                user=user,
+                module=module,
                 defaults={
                     "can_view": bool(item.get("can_view", False)),
                     "can_create": bool(item.get("can_create", False)),
@@ -599,23 +606,97 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
             serializer.validated_data.pop("is_org_admin", None)
             serializer.validated_data.pop("rehber_kadr", None)
 
-        approver_doc_types = serializer.validated_data.pop("approver_doc_types", None)
+        approver_doc_types = serializer.validated_data.pop(
+            "approver_doc_types",
+            None
+        )
+
+        modules_data = serializer.validated_data.pop(
+            "modules",
+            None
+        )
 
         user = serializer.save()
 
-        # İmzalama / Təsdiq (2-ci mərhələ, MSN) hüquqları - redaktə zamanı göndərilibsə tam
-        # siyahı kimi qəbul edilir (hər doc_type üçün true/false), köhnə vəziyyət üzərinə yazılır.
+        # ---------------------------------------------------------
+        # MODULE PERMISSIONS
+        # ---------------------------------------------------------
+
+        if modules_data is not None:
+            from permissions_module.models import (
+                Module,
+                UserModulePermission,
+            )
+
+            # Qurum admini deyilsə, inzibatçı panelini siyahıdan çıxar
+            if not user.is_org_admin:
+                modules_data = [
+                    item
+                    for item in modules_data
+                    if Module.objects.filter(
+                        id=item.get("module")
+                    ).exclude(
+                        key="inzibatci-paneli"
+                    ).exists()
+                ]
+
+                # Əvvəldən verilmiş inzibatçı paneli icazəsini də sil
+                admin_module = Module.objects.filter(
+                    key="inzibatci-paneli"
+                ).first()
+
+                if admin_module:
+                    UserModulePermission.objects.filter(
+                        user=user,
+                        module=admin_module,
+                    ).delete()
+
+            for item in modules_data:
+                module = Module.objects.filter(
+                    id=item.get("module")
+                ).first()
+
+                if not module:
+                    continue
+
+                # İkinci backend yoxlaması
+                if (
+                        module.key == "inzibatci-paneli"
+                        and not user.is_org_admin
+                ):
+                    continue
+
+                UserModulePermission.objects.update_or_create(
+                    user=user,
+                    module=module,
+                    defaults={
+                        "can_view": bool(item.get("can_view", False)),
+                        "can_create": bool(item.get("can_create", False)),
+                        "can_edit": bool(item.get("can_edit", False)),
+                        "can_approve": bool(item.get("can_approve", False)),
+                        "granted_by": self.request.user,
+                    },
+                )
+
+        # ---------------------------------------------------------
+        # APPROVER PERMISSIONS
+        # ---------------------------------------------------------
+
         if approver_doc_types is not None:
             from workflow.models import ApproverPermission
             from licenses.field_schema import DOC_TYPES
 
             valid_doc_types = dict(DOC_TYPES)
+
             for item in approver_doc_types:
                 doc_type = item.get("doc_type")
+
                 if doc_type not in valid_doc_types:
                     continue
+
                 ApproverPermission.objects.update_or_create(
-                    user=user, doc_type=doc_type,
+                    user=user,
+                    doc_type=doc_type,
                     defaults={
                         "can_approve": bool(item.get("value", False)),
                         "granted_by": self.request.user,
@@ -623,7 +704,9 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
                 )
 
         log_security_event(
-            "ADMIN_USER_UPDATED", user=self.request.user, ip=get_client_ip(self.request),
+            "ADMIN_USER_UPDATED",
+            user=self.request.user,
+            ip=get_client_ip(self.request),
             extra=f"target={user.username} is_active={user.is_active}",
         )
 
