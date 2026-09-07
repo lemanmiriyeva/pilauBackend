@@ -12,11 +12,6 @@ APPROVAL_STAGE_CHOICES = (
 
 
 class ApprovalSettings(models.Model):
-    """Hər lisenziya kateqoriyası (doc_type) üçün AYRICA tənzimlənən mərhələli təsdiq keçidi.
-    Konkret kateqoriyada 'staged_approval_enabled' söndürüləndə, HƏMİN kateqoriyada yeni
-    yaradılan sənədlər heç bir təsdiqə ehtiyac olmadan birbaşa 'aktiv' statusu ilə yaradılır
-    (bax PermitDocument.save). Digər kateqoriyalara təsir etmir."""
-
     doc_type = models.CharField("Lisenziya kateqoriyası", max_length=20, choices=DOC_TYPES, unique=True)
     staged_approval_enabled = models.BooleanField("Mərhələli təsdiq aktivdir", default=True)
     updated_by = models.ForeignKey(
@@ -40,8 +35,6 @@ class ApprovalSettings(models.Model):
 
     @classmethod
     def all_as_dict(cls) -> dict:
-        """Bütün kateqoriyalar üçün cari vəziyyət - hələ sətri yaradılmayan kateqoriyalar
-        defolt olaraq AÇIQ sayılır (mərhələli təsdiqin defolt davranışı)."""
         existing = {row.doc_type: row.staged_approval_enabled for row in cls.objects.all()}
         return {dt: existing.get(dt, True) for dt, _ in DOC_TYPES}
 
@@ -138,16 +131,7 @@ class PermitDocument(models.Model):
         super().save(*args, **kwargs)
 
     def approve_stage(self, user, comment: str = "") -> "LicenseCertificate | None":
-        """Cari mərhələni təsdiqləyir: 1-ci mərhələdən 2-ciyə keçir, 2-ci mərhələ
-        təsdiqlənəndə isə sənəd 'aktiv' olur VƏ avtomatik olaraq (LicenseCertificate) rəsmi
-        sənəd qeydi yaradılır - bax LicenseCertificate, workflow.notify.notify_certificate_ready.
-        Yaradılmış sənəd qeydini qaytarır (yalnız indicə 2-ci mərhələ təsdiqləndikdə), əks halda None.
 
-        QEYD: 1-ci mərhələ təsdiqlənəndə, əgər təşkilat admini bu kateqoriya üçün 2-ci mərhələni
-        söndürübsə (bax workflow.models.OrgStage2Setting - 'Qurum yoxlaması icazələri' səhifəsi)
-        VƏ YA Nazirlik admini bu kateqoriya üçün 2-ci mərhələni ümumiyyətlə söndürübsə (bax
-        workflow.models.DocumentWorkflowConfig.stage2_enabled - 'Təsdiq axını' səhifəsi),
-        sənəd MSN-ə getmədən birbaşa aktivləşir."""
         from workflow.models import DocumentWorkflowConfig, OrgStage2Setting
 
         now = timezone.now()
@@ -195,7 +179,7 @@ class PermitDocument(models.Model):
 
 
 class PermitDocumentFile(models.Model):
-    """'Fayl yüklə' rejimində yüklənən sənədlər (field_schema.py-dəki file_fields-ə uyğun)."""
+
 
     document = models.ForeignKey(PermitDocument, on_delete=models.CASCADE, related_name="files")
     field_key = models.SlugField("Sahə açarı", max_length=100)
@@ -219,18 +203,7 @@ def _default_certificate_number() -> str:
 
 
 class LicenseCertificate(models.Model):
-    """Lisenziya tam təsdiqləndikdən (2-ci mərhələ) sonra AVTOMATİK yaranan rəsmi sənəd qeydi.
 
-    PermitDocument-dən (müraciət/iş axını modeli) QƏSDƏN AYRI bir modeldir - konseptual olaraq
-    "müraciət" ilə "nəticədə yaranan rəsmi sənəd" fərqli şeylərdir, gələcəkdə sənədin öz həyat
-    dövrü (yenidən çap, ləğv, dublikat və s.) ola bilər. OneToOne ilə müraciətə bağlıdır.
-
-    Hazırda vizual şablon hazır olmadığı üçün yalnız müraciət zamanı doldurulan anketin JSON
-    köçürməsini (snapshot - mənbə sənəd sonradan dəyişsə belə bu qeyd təsirlənməməlidir) saxlayır;
-    real şablon/dizayn təqdim ediləndə buradan render ediləcək.
-
-    'Tamamlandı' düyməsi bu qeydi YARATMIR (avtomatik, təsdiqlə birlikdə yaranır) - yalnız
-    istifadəçinin sənədi nəzərdən keçirib təsdiqlədiyini (status='tamamlandi') qeyd edir."""
 
     STATUS_CHOICES = (
         ("qaralama", "Qaralama"),
@@ -254,13 +227,6 @@ class LicenseCertificate(models.Model):
         on_delete=models.SET_NULL, related_name="completed_certificates",
     )
     completed_at = models.DateTimeField(null=True, blank=True)
-
-    # --- Elektron imza (SİM İmza / Asan İmza) ---
-    # QEYD: hazırda real e-imza şlüzü (mobil operator SİM İmza API-si və ya Asan İmza SDK/API-si)
-    # inteqrasiya edilməyib - LicenseCertificateView.sign action-ı MOCK işləyir (bax views.py).
-    # Real inteqrasiya üçün müvafiq operatorlardan/DVX-dən API təsdiqi, sertifikat və endpoint
-    # məlumatları tələb olunur; həmin məlumatlar əldə ediləndə sign action-ın daxili məntiqi
-    # əvəz olunmalıdır - bu sahələr və serializer artıq hazırdır.
     is_signed = models.BooleanField("İmzalanıb", default=False)
     signature_method = models.CharField(
         "İmza üsulu", max_length=10, choices=SIGNATURE_METHOD_CHOICES, blank=True
