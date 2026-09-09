@@ -60,8 +60,26 @@ SUBMISSION_MODES = (
 # sayı artarsa, YALNIZ bu siyahını yeniləmək kifayətdir (key unikal olmalıdır) -
 # kateqoriya hesablaması (bax compute_lisenziya_kateqoriya) avtomatik uyğunlaşır.
 ISTINAD_MADDESI_BENDLERI = [
-    {"key": "bend_vi", "label": "VI bənd"},
-    {"key": "bend_vii", "label": "VII bənd"},
+    {"key": "bend_6_1", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
+     "number": "6.1.", "label": "layihələndirilməsi"},
+    {"key": "bend_6_2", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
+     "number": "6.2.", "label": "istehsalı və sınaqdan keçirilməsi"},
+    {"key": "bend_6_3", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
+     "number": "6.3.", "label": "quraşdırılması, montajı, təmiri və texniki xidmət göstərilməsi"},
+    {"key": "bend_6_4", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
+     "number": "6.4.", "label": "saxlanılması"},
+    {"key": "bend_6_5", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
+     "number": "6.5.", "label": "utilizasiyası"},
+    {"key": "bend_7_1", "group": "7", "group_label": "Döyüş sursatının:",
+     "number": "7.1.", "label": "layihələndirilməsi"},
+    {"key": "bend_7_2", "group": "7", "group_label": "Döyüş sursatının:",
+     "number": "7.2.", "label": "istehsalı və sınaqdan keçirilməsi"},
+    {"key": "bend_7_3", "group": "7", "group_label": "Döyüş sursatının:",
+     "number": "7.3.", "label": "təmiri və texniki xidmət göstərilməsi"},
+    {"key": "bend_7_4", "group": "7", "group_label": "Döyüş sursatının:",
+     "number": "7.4.", "label": "saxlanılması"},
+    {"key": "bend_7_5", "group": "7", "group_label": "Döyüş sursatının:",
+     "number": "7.5.", "label": "utilizasiyası"},
 ]
 
 LISENZIYA_KATEQORIYA_LABELS = {
@@ -71,12 +89,13 @@ LISENZIYA_KATEQORIYA_LABELS = {
 
 
 def compute_lisenziya_kateqoriya(selected_bend_keys) -> str:
-    """İstinad maddəsində işarələnmiş bəndlərə görə lisenziyanın kateqoriyasını
-    ('umumi_lisenziya' / 'xususi_lisenziya') təyin edir. İstifadəçi bunu seçmir -
-    sistem avtomatik hesablayır (bax PermitDocument.save, licenses/models.py):
+    """İstinad maddəsində (6.1-6.5 və 7.1-7.5 yarım-bəndləri) işarələnmiş
+    seçimlərə görə lisenziyanın kateqoriyasını ('umumi_lisenziya' /
+    'xususi_lisenziya') təyin edir. İstifadəçi bunu seçmir - sistem avtomatik
+    hesablayır (bax PermitDocument.save, licenses/models.py):
 
-      - Bütün bəndlər işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
-      - Bəndlərdən heç olmasa biri işarələnməyibsə (məhdudlaşdırılıb)  -> Xüsusi Lisenziya
+      - Bütün 10 yarım-bənd işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
+      - Yarım-bəndlərdən heç olmasa biri işarələnməyibsə (məhdudlaşdırılıb)  -> Xüsusi Lisenziya
     """
     all_keys = {b["key"] for b in ISTINAD_MADDESI_BENDLERI}
     selected = {k for k in (selected_bend_keys or [])}
