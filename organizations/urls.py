@@ -111,4 +111,9 @@ urlpatterns = [
         views.OrganizationDetailView.as_view(),
         name="organization_detail",
     ),
+    path(
+        "voen-lookup/",
+        views.OrganizationVoenLookupView.as_view(),
+        name="organization_voen_lookup"
+    ),
 ]

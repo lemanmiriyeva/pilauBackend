@@ -9,7 +9,7 @@ from rest_framework import generics, permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Organization, OrganizationDepartment, OrganizationPosition
+from .models import AuthorizedPerson, Organization, OrganizationDepartment, OrganizationPosition
 from .permissions import (
     IsFullAdminForCreate,
     IsStaffOrOrgAdmin,
@@ -235,6 +235,56 @@ class OrganizationStatsView(APIView):
             "by_doc_type": by_doc_type,
             "series": series,
             "documents": documents,
+        })
+
+
+class OrganizationVoenLookupView(APIView):
+    """GET /api/organizations/voen-lookup/?voen=...
+
+    VÖEN üzrə sistemdə artıq qeydiyyatda olan təşkilatı (+ səlahiyyətli şəxslərini) tapıb
+    qaytarır - Lisenziya/İdxal-İxrac və s. sənəd yaratma formalarında (bax licenses/*/yeni)
+    "Müraciətçi məlumatları" bölməsinin avtomatik doldurulması üçün. Yalnız MSN (Müdafiə
+    Sənayesi Nazirliyi) istifadəçiləri üçün mənalıdır - onlar sənədi ÖZ təşkilatları deyil,
+    VÖEN-i bildikləri başqa (artıq qeydiyyatda olan) bir müəssisə adından yaradır (bax
+    frontend - "isMsn" olduqda sahələr redaktə oluna bilir).
+
+    QEYD: Bu, xarici (Vergilər Nazirliyi və s.) dövlət reyestrinə qoşulma DEYİL - hazırda
+    belə bir inteqrasiya yoxdur. Yalnız sistemdəki (Organization cədvəlindəki) mövcud
+    təşkilatlar arasında axtarır. Tapılmasa, "found": false qaytarılır və istifadəçi
+    məlumatları əl ilə daxil etməyə davam edir."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        voen = (request.query_params.get("voen") or "").strip()
+        if not voen:
+            return Response({"detail": "voen parametri tələb olunur."}, status=400)
+
+        org = Organization.objects.filter(voen=voen, is_active=True).first()
+        if not org:
+            return Response({"found": False})
+
+        org_ids = scoped_organization_ids(request.user)
+        if org_ids is not None and org.id not in org_ids:
+            # Nazirlik admini/təsdiq icraçıları xaricindəki adi istifadəçilər öz əhatələrindən
+            # kənar təşkilatın məlumatlarını bu yolla "kəşf" edə bilməməlidir.
+            return Response({"found": False})
+
+        persons = AuthorizedPerson.objects.filter(organization=org)
+        return Response({
+            "found": True,
+            "organization": {
+                "id": org.id,
+                "full_name": org.full_name,
+                "voen": org.voen,
+                "code": org.code,
+            },
+            "authorized_persons": [
+                {
+                    "id": p.id, "person_type": p.person_type, "full_name": p.full_name,
+                    "fin_kod": p.fin_kod, "department": p.department, "position": p.position,
+                    "email": p.email, "phone": p.phone,
+                } for p in persons
+            ],
         })
 
 

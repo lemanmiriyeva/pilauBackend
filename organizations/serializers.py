@@ -132,27 +132,73 @@ class OrganizationReportCardSerializer(serializers.ModelSerializer):
 
 
 class OrganizationDetailSerializer(serializers.ModelSerializer):
+    """Təşkilat yaratma/redaktə (bax OrganizationListCreateView/OrganizationDetailView).
+
+    'authorized_persons' YANIndA 'departments' də nested qəbul edilir - Image 3 formu
+    (frontend: OrganizationForm.jsx) departamentləri (+ hər birinin daxilindəki vəzifələri)
+    bu cür göndərir: [{"name": "...", "positions": ["...", "..."]}]. Bu, sadə "flat" struktur
+    olduğu üçün (parent/head burada göndərilmir - onlar yalnız İnzibatçı Paneli -> Departamentlər
+    və Vəzifələr admin CRUD-unda (OrganizationDepartmentViewSet) idarə olunur), birbaşa
+    OrganizationDepartment/OrganizationPosition modellərinə yazılır - "authorized_persons"-da
+    olduğu kimi hər yeniləmədə silinib təzədən yaradılır (sadə/etibarlı yanaşma)."""
     authorized_persons = AuthorizedPersonSerializer(many=True, required=False)
+    departments = serializers.ListField(
+        child=serializers.DictField(), required=False, write_only=True,
+    )
 
     class Meta:
         model = Organization
         fields = [
             "id", "code", "full_name", "voen", "state_reg_number",
             "email", "phone", "address",
-            "parent", "notes", "authorized_persons", "is_active",
+            "parent", "notes", "authorized_persons", "departments", "is_active",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # 'departments' write_only olduğu üçün avtomatik gəlmir - GET/redaktə (edit) formu
+        # üçün əl ilə əlavə edirik ki, OrganizationForm.jsx-in "initialData?.departments"
+        # gözlədiyi struktur (name + positions siyahısı) dolsun.
+        data["departments"] = [
+            {
+                "name": dept.name,
+                "positions": [pos.name for pos in dept.positions.all()],
+            }
+            for dept in instance.departments.filter(parent__isnull=True).prefetch_related("positions")
+        ]
+        return data
+
+    def _save_departments(self, organization, departments_data):
+        organization.departments.all().delete()
+        for dept in departments_data or []:
+            name = (dept.get("name") or "").strip()
+            if not name:
+                continue
+            department = OrganizationDepartment.objects.create(
+                organization=organization, name=name,
+            )
+            for position_name in dept.get("positions") or []:
+                position_name = (position_name or "").strip()
+                if not position_name:
+                    continue
+                OrganizationPosition.objects.create(
+                    organization=organization, department=department, name=position_name,
+                )
+
     def create(self, validated_data):
         persons_data = validated_data.pop("authorized_persons", [])
+        departments_data = validated_data.pop("departments", [])
         organization = Organization.objects.create(**validated_data)
         for person_data in persons_data:
             AuthorizedPerson.objects.create(organization=organization, **person_data)
+        self._save_departments(organization, departments_data)
         return organization
 
     def update(self, instance, validated_data):
         persons_data = validated_data.pop("authorized_persons", None)
+        departments_data = validated_data.pop("departments", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -161,4 +207,8 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
             instance.authorized_persons.all().delete()
             for person_data in persons_data:
                 AuthorizedPerson.objects.create(organization=instance, **person_data)
+
+        if departments_data is not None:
+            self._save_departments(instance, departments_data)
+
         return instance

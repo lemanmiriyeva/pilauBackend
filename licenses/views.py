@@ -17,6 +17,7 @@ from organizations.permissions import scoped_organization_ids
 
 from licenses.certificate_pdf import build_certificate_pdf
 from licenses.field_schema import DOC_TYPES, get_schema
+from licenses.anket_docx import build_anket_template, parse_anket_template
 from licenses.models import ApprovalSettings, LicenseCertificate, PermitDocument, PermitDocumentFile
 from licenses.serializers import (
     ApprovalSettingsSerializer,
@@ -44,7 +45,11 @@ _GRANULARITY_TRUNC = {"day": TruncDate, "month": TruncMonth, "year": TruncYear}
 DOC_TYPE_MODULE_KEY = {
     "ixrac": "idxal-ixrac",
     "idxal": "idxal-ixrac",
+    # "İstehsal" bundan sonra "Lisenziya" adı altında Xüsusi/Ümumi olaraq
+    # bölünüb, amma hər ikisi hələlik eyni "istehsal" icazə modulunun altındadır.
     "istehsal": "istehsal",
+    "xususi_lisenziya": "istehsal",
+    "umumi_lisenziya": "istehsal",
     "xususi_satis": "xususi-satis",
     "edv_guzest": "edv-guzesti",
 }
@@ -200,6 +205,69 @@ class PermitDocumentSchemaView(APIView):
             valid = ", ".join(dict(DOC_TYPES).keys())
             return Response({"detail": f"doc_type bunlardan biri olmalıdır: {valid}."}, status=400)
         return Response(get_schema(doc_type))
+
+
+class AnketTemplateDownloadView(APIView):
+    """GET /api/licenses/permit-documents/anket-template/?doc_type=...&voen=...&applicant_name=...
+
+    "2. Lisenziya anketi" bölməsi üçün doldurulacaq Word (.docx) şablonu yaradıb
+    qaytarır. VÖEN (və məlumdursa müəssisə adı) sorğu parametrindən (frontend
+    "Müraciətçi məlumatları" bölməsindəki cari dəyərləri göndərir) əvvəlcədən
+    doldurulur - istifadəçi xarici VÖEN axtarışı/API-yə etibar etməli olmur, forma
+    hansı VÖEN-i göstərirsə template də onu göstərir."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        doc_type = request.query_params.get("doc_type")
+        if doc_type not in dict(DOC_TYPES):
+            valid = ", ".join(dict(DOC_TYPES).keys())
+            return Response({"detail": f"doc_type bunlardan biri olmalıdır: {valid}."}, status=400)
+
+        voen = request.query_params.get("voen", "")
+        applicant_name = request.query_params.get("applicant_name", "")
+
+        schema = get_schema(doc_type)
+        buffer = build_anket_template(schema, applicant_name=applicant_name, voen=voen)
+
+        response = HttpResponse(
+            buffer.read(),
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{doc_type}_anket_sablonu.docx"'
+        return response
+
+
+class AnketTemplateParseView(APIView):
+    """POST /api/licenses/permit-documents/anket-parse/  (multipart: file, doc_type)
+
+    Doldurulmuş Word şablonunu oxuyub "2. Lisenziya anketi" sahələrinin dəyərlərini
+    çıxarır. Frontend bu dəyərləri birbaşa formValues-a yazır - istifadəçi hər sahəni
+    əl ilə doldurmaq məcburiyyətində qalmır."""
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        doc_type = request.data.get("doc_type")
+        if doc_type not in dict(DOC_TYPES):
+            valid = ", ".join(dict(DOC_TYPES).keys())
+            return Response({"detail": f"doc_type bunlardan biri olmalıdır: {valid}."}, status=400)
+
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            return Response({"detail": "\"file\" (.docx) tələb olunur."}, status=400)
+
+        schema = get_schema(doc_type)
+
+        try:
+            result = parse_anket_template(uploaded, schema)
+        except Exception:
+            return Response(
+                {"detail": "Fayl oxuna bilmədi. Zəhmət olmasa \"Şablonu yüklə\" ilə əldə etdiyiniz "
+                            ".docx faylını dəyişməyin, yalnız \"Dəyər\" sütununu doldurun."},
+                status=400,
+            )
+
+        return Response(result)
 
 
 class ApprovalSettingsView(APIView):

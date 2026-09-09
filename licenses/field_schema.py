@@ -10,7 +10,9 @@ redaktə etmək kifayətdir - frontend formu avtomatik uyğunlaşır.
 DOC_TYPES = (
     ("ixrac", "İxrac"),
     ("idxal", "İdxal"),
-    ("istehsal", "İstehsal"),
+    ("istehsal", "İstehsal (köhnə)"),
+    ("xususi_lisenziya", "Xüsusi Lisenziya"),
+    ("umumi_lisenziya", "Ümumi Lisenziya"),   
     ("xususi_satis", "Xüsusi Satış"),
     ("gomrukden_azadolma", "Gömrükdən Azadolma"),
     ("edvden_azadolma", "ƏDV-dən Azadolma"),
@@ -205,6 +207,62 @@ _ISTEHSAL_FORM_FIELDS = [
     {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
 ]
 
+# --- "Lisenziya" (əvvəlki "İstehsal") - "Xüsusi Lisenziya" və "Ümumi Lisenziya" ---
+# Hələlik İstehsal sahələrinin AYNI SURƏTİ (copy) - hər biri ayrıca redaktə
+# olunacaq, ona görə İSTEHSAL siyahılarına referans vermək əvəzinə tam surəti
+# saxlanılır. Sahələri sonra bura gəlib ayrı-ayrı dəyişmək kifayətdir.
+_XUSUSI_LISENZIYA_FILE_FIELDS = [
+    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (imzalanmış)", "required": True, "max_size_mb": 10},
+    {"key": "tesis_senedi", "label": "Təsis sənədi (nizamnamə)", "required": True, "max_size_mb": 10},
+    {"key": "voen_sureti", "label": "VÖEN şəhadətnaməsinin surəti", "required": True, "max_size_mb": 10},
+    {"key": "fealiyyet_senedi", "label": "Müəssisənin fəaliyyəti barədə sənəd", "required": True, "max_size_mb": 10},
+    {"key": "isci_terkibi_senedi", "label": "Müəssisənin işçi tərkibi barədə sənəd (Ərizəyə əlavə)", "required": True,
+     "max_size_mb": 10},
+    {"key": "vesiqe_sureti", "label": "Səlahiyyətli şəxsin şəxsiyyət vəsiqəsinin surəti", "required": True,
+     "max_size_mb": 10},
+]
+
+_XUSUSI_LISENZIYA_FORM_FIELDS = [
+    {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
+    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
+    {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
+     "options": LICENSE_TYPE_CHOICES},
+    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
+     "options": ACTIVITY_TYPE_CHOICES},
+    {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
+    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text",
+     "readonly": True, "required": True, "value": '"İcazələr haqqında Qanun",VI-VII bəndlər'},
+    {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
+    {"key": "muddet", "label": "Müddət", "type": "text", "readonly": True, "required": True, "value": 'Müddətsiz'},
+    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
+]
+
+_UMUMI_LISENZIYA_FILE_FIELDS = [
+    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (imzalanmış)", "required": True, "max_size_mb": 10},
+    {"key": "tesis_senedi", "label": "Təsis sənədi (nizamnamə)", "required": True, "max_size_mb": 10},
+    {"key": "voen_sureti", "label": "VÖEN şəhadətnaməsinin surəti", "required": True, "max_size_mb": 10},
+    {"key": "fealiyyet_senedi", "label": "Müəssisənin fəaliyyəti barədə sənəd", "required": True, "max_size_mb": 10},
+    {"key": "isci_terkibi_senedi", "label": "Müəssisənin işçi tərkibi barədə sənəd (Ərizəyə əlavə)", "required": True,
+     "max_size_mb": 10},
+    {"key": "vesiqe_sureti", "label": "Səlahiyyətli şəxsin şəxsiyyət vəsiqəsinin surəti", "required": True,
+     "max_size_mb": 10},
+]
+
+_UMUMI_LISENZIYA_FORM_FIELDS = [
+    {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
+    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
+    {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
+     "options": LICENSE_TYPE_CHOICES},
+    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
+     "options": ACTIVITY_TYPE_CHOICES},
+    {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
+    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text",
+     "readonly": True, "required": True, "value": '"İcazələr haqqında Qanun",VI-VII bəndlər'},
+    {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
+    {"key": "muddet", "label": "Müddət", "type": "text", "readonly": True, "required": True, "value": 'Müddətsiz'},
+    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
+]
+
 # --- "Fayl yüklə" rejimi - Xüsusi satış icazə sənədi (Image 2) ---
 _XUSUSI_SATIS_FILE_FIELDS = [
     {"key": "muraciet_mektubu", "label": "Müraciət məktubu (möhürlü)", "required": True, "max_size_mb": 10},
@@ -277,6 +335,8 @@ _SCHEMA_BY_DOC_TYPE = {
     "ixrac": {"file_fields": _IXRAC_FILE_FIELDS, "form_fields": _FORM_FIELDS},
     "idxal": {"file_fields": _IDXAL_FILE_FIELDS, "form_fields": _FORM_FIELDS},
     "istehsal": {"file_fields": _ISTEHSAL_FILE_FIELDS, "form_fields": _ISTEHSAL_FORM_FIELDS},
+    "xususi_lisenziya": {"file_fields": _XUSUSI_LISENZIYA_FILE_FIELDS, "form_fields": _XUSUSI_LISENZIYA_FORM_FIELDS},
+    "umumi_lisenziya": {"file_fields": _UMUMI_LISENZIYA_FILE_FIELDS, "form_fields": _UMUMI_LISENZIYA_FORM_FIELDS},
     "xususi_satis": {"file_fields": _XUSUSI_SATIS_FILE_FIELDS, "form_fields": _XUSUSI_SATIS_FORM_FIELDS},
     "gomrukden_azadolma": {"file_fields": _GOMRUKDEN_AZADOLMA_FILE_FIELDS,
                            "form_fields": _GOMRUKDEN_AZADOLMA_FORM_FIELDS},
