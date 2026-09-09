@@ -12,7 +12,7 @@ DOC_TYPES = (
     ("idxal", "İdxal"),
     ("istehsal", "İstehsal (köhnə)"),
     ("xususi_lisenziya", "Xüsusi Lisenziya"),
-    ("umumi_lisenziya", "Ümumi Lisenziya"),   
+    ("umumi_lisenziya", "Ümumi Lisenziya"),
     ("xususi_satis", "Xüsusi Satış"),
     ("gomrukden_azadolma", "Gömrükdən Azadolma"),
     ("edvden_azadolma", "ƏDV-dən Azadolma"),
@@ -53,6 +53,36 @@ SUBMISSION_MODES = (
     ("file", "Fayl yüklə"),
     ("form", "Elektron müraciət forması"),
 )
+
+# --- "Lisenziya" (Xüsusi/Ümumi) - istinad maddəsindəki bəndlər (checkbox siyahısı) ---
+# "İcazələr haqqında" Qanunun lisenziyaya aid maddəsinin bəndləri. İstifadəçi bunları
+# formda/Word şablonunda checkbox kimi işarələyir. Hüquqi mətn dəyişərsə və ya bənd
+# sayı artarsa, YALNIZ bu siyahını yeniləmək kifayətdir (key unikal olmalıdır) -
+# kateqoriya hesablaması (bax compute_lisenziya_kateqoriya) avtomatik uyğunlaşır.
+ISTINAD_MADDESI_BENDLERI = [
+    {"key": "bend_vi", "label": "VI bənd"},
+    {"key": "bend_vii", "label": "VII bənd"},
+]
+
+LISENZIYA_KATEQORIYA_LABELS = {
+    "umumi_lisenziya": "Ümumi Lisenziya",
+    "xususi_lisenziya": "Xüsusi Lisenziya",
+}
+
+
+def compute_lisenziya_kateqoriya(selected_bend_keys) -> str:
+    """İstinad maddəsində işarələnmiş bəndlərə görə lisenziyanın kateqoriyasını
+    ('umumi_lisenziya' / 'xususi_lisenziya') təyin edir. İstifadəçi bunu seçmir -
+    sistem avtomatik hesablayır (bax PermitDocument.save, licenses/models.py):
+
+      - Bütün bəndlər işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
+      - Bəndlərdən heç olmasa biri işarələnməyibsə (məhdudlaşdırılıb)  -> Xüsusi Lisenziya
+    """
+    all_keys = {b["key"] for b in ISTINAD_MADDESI_BENDLERI}
+    selected = {k for k in (selected_bend_keys or [])}
+    if all_keys and all_keys.issubset(selected):
+        return "umumi_lisenziya"
+    return "xususi_lisenziya"
 
 # --- "Fayl yüklə" rejimi üçün tələb olunan sənədlər ---
 _IXRAC_FILE_FIELDS = [
@@ -208,10 +238,20 @@ _ISTEHSAL_FORM_FIELDS = [
 ]
 
 # --- "Lisenziya" (əvvəlki "İstehsal") - "Xüsusi Lisenziya" və "Ümumi Lisenziya" ---
-# Hələlik İstehsal sahələrinin AYNI SURƏTİ (copy) - hər biri ayrıca redaktə
-# olunacaq, ona görə İSTEHSAL siyahılarına referans vermək əvəzinə tam surəti
-# saxlanılır. Sahələri sonra bura gəlib ayrı-ayrı dəyişmək kifayətdir.
-_XUSUSI_LISENZIYA_FILE_FIELDS = [
+#
+# ARTIQ TƏK SXEM: Xüsusi və Ümumi Lisenziyanın sahələri eynidir - fərq YALNIZ
+# istinad maddəsindəki hansı bəndlərin işarələndiyindən asılı olaraq sistemin
+# avtomatik təyin etdiyi kateqoriyadır (bax compute_lisenziya_kateqoriya və
+# licenses/models.py -> PermitDocument.save()). Ona görə "yeni lisenziya"
+# müraciəti tək formadır, istifadəçi Xüsusi/Ümumi arasında seçim eləmir.
+#
+# Bu formada ARTIQ YOXDUR (istifadəçi doldurmur, sistem özü idarə edir):
+#   - "Verilmə tarixi"  -> yalnız lisenziya İMZALANDIQDAN sonra düşür
+#                          (bax LicenseCertificateView.sign -> PermitDocument.issue_date)
+#   - "Müddət"          -> bu lisenziya növü həmişə müddətsizdir (bax pdf.py/certificate_pdf.py)
+#   - "Status"          -> təsdiq axınının nəticəsidir (gözləyir/aktiv/rədd - bax
+#                          PermitDocument.approve_stage / reject), anketdə sahə deyil
+_LISENZIYA_FILE_FIELDS = [
     {"key": "muraciet_mektubu", "label": "Müraciət məktubu (imzalanmış)", "required": True, "max_size_mb": 10},
     {"key": "tesis_senedi", "label": "Təsis sənədi (nizamnamə)", "required": True, "max_size_mb": 10},
     {"key": "voen_sureti", "label": "VÖEN şəhadətnaməsinin surəti", "required": True, "max_size_mb": 10},
@@ -222,7 +262,7 @@ _XUSUSI_LISENZIYA_FILE_FIELDS = [
      "max_size_mb": 10},
 ]
 
-_XUSUSI_LISENZIYA_FORM_FIELDS = [
+_LISENZIYA_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
     {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
@@ -230,38 +270,31 @@ _XUSUSI_LISENZIYA_FORM_FIELDS = [
     {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
      "options": ACTIVITY_TYPE_CHOICES},
     {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
-    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text",
-     "readonly": True, "required": True, "value": '"İcazələr haqqında Qanun",VI-VII bəndlər'},
-    {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
-    {"key": "muddet", "label": "Müddət", "type": "text", "readonly": True, "required": True, "value": 'Müddətsiz'},
-    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
+    {
+        "key": "istinad_maddesi_bendleri",
+        "label": "İstinad maddəsi (\"İcazələr haqqında\" Qanun) - bəndlər",
+        "type": "checkbox_list",
+        "required": True,
+        "options": ISTINAD_MADDESI_BENDLERI,
+    },
+    {
+        "key": "kateqoriya",
+        "label": "Lisenziya kateqoriyası",
+        "type": "text",
+        "readonly": True,
+        "auto": True,
+        "computed": True,
+        "required": False,
+        "help_text": "Bütün bəndlər işarələnibsə \"Ümumi Lisenziya\", əks halda \"Xüsusi Lisenziya\" "
+                     "- sistem tərəfindən avtomatik hesablanır, redaktə oluna bilməz.",
+    },
 ]
 
-_UMUMI_LISENZIYA_FILE_FIELDS = [
-    {"key": "muraciet_mektubu", "label": "Müraciət məktubu (imzalanmış)", "required": True, "max_size_mb": 10},
-    {"key": "tesis_senedi", "label": "Təsis sənədi (nizamnamə)", "required": True, "max_size_mb": 10},
-    {"key": "voen_sureti", "label": "VÖEN şəhadətnaməsinin surəti", "required": True, "max_size_mb": 10},
-    {"key": "fealiyyet_senedi", "label": "Müəssisənin fəaliyyəti barədə sənəd", "required": True, "max_size_mb": 10},
-    {"key": "isci_terkibi_senedi", "label": "Müəssisənin işçi tərkibi barədə sənəd (Ərizəyə əlavə)", "required": True,
-     "max_size_mb": 10},
-    {"key": "vesiqe_sureti", "label": "Səlahiyyətli şəxsin şəxsiyyət vəsiqəsinin surəti", "required": True,
-     "max_size_mb": 10},
-]
-
-_UMUMI_LISENZIYA_FORM_FIELDS = [
-    {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
-    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
-    {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
-     "options": LICENSE_TYPE_CHOICES},
-    {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
-     "options": ACTIVITY_TYPE_CHOICES},
-    {"key": "subyekt_adi", "label": "Subyekt adı", "type": "text", "required": False, "auto": True},
-    {"key": "istinad_maddesi", "label": "İstinad maddəsi (İcazələr haqqında Qanun - bənd)", "type": "text",
-     "readonly": True, "required": True, "value": '"İcazələr haqqında Qanun",VI-VII bəndlər'},
-    {"key": "verilme_tarixi", "label": "Verilmə tarixi", "type": "date", "required": True},
-    {"key": "muddet", "label": "Müddət", "type": "text", "readonly": True, "required": True, "value": 'Müddətsiz'},
-    {"key": "status", "label": "Status", "type": "select", "required": True, "options": STATUS_CHOICES},
-]
+# Köhnə adlar geriyə uyğunluq üçün saxlanılıb (bəzi importlar bunlara istinad edə bilər).
+_XUSUSI_LISENZIYA_FILE_FIELDS = _LISENZIYA_FILE_FIELDS
+_XUSUSI_LISENZIYA_FORM_FIELDS = _LISENZIYA_FORM_FIELDS
+_UMUMI_LISENZIYA_FILE_FIELDS = _LISENZIYA_FILE_FIELDS
+_UMUMI_LISENZIYA_FORM_FIELDS = _LISENZIYA_FORM_FIELDS
 
 # --- "Fayl yüklə" rejimi - Xüsusi satış icazə sənədi (Image 2) ---
 _XUSUSI_SATIS_FILE_FIELDS = [
@@ -335,13 +368,16 @@ _SCHEMA_BY_DOC_TYPE = {
     "ixrac": {"file_fields": _IXRAC_FILE_FIELDS, "form_fields": _FORM_FIELDS},
     "idxal": {"file_fields": _IDXAL_FILE_FIELDS, "form_fields": _FORM_FIELDS},
     "istehsal": {"file_fields": _ISTEHSAL_FILE_FIELDS, "form_fields": _ISTEHSAL_FORM_FIELDS},
-    "xususi_lisenziya": {"file_fields": _XUSUSI_LISENZIYA_FILE_FIELDS, "form_fields": _XUSUSI_LISENZIYA_FORM_FIELDS},
-    "umumi_lisenziya": {"file_fields": _UMUMI_LISENZIYA_FILE_FIELDS, "form_fields": _UMUMI_LISENZIYA_FORM_FIELDS},
+    "xususi_lisenziya": {"file_fields": _LISENZIYA_FILE_FIELDS, "form_fields": _LISENZIYA_FORM_FIELDS},
+    "umumi_lisenziya": {"file_fields": _LISENZIYA_FILE_FIELDS, "form_fields": _LISENZIYA_FORM_FIELDS},
     "xususi_satis": {"file_fields": _XUSUSI_SATIS_FILE_FIELDS, "form_fields": _XUSUSI_SATIS_FORM_FIELDS},
     "gomrukden_azadolma": {"file_fields": _GOMRUKDEN_AZADOLMA_FILE_FIELDS,
                            "form_fields": _GOMRUKDEN_AZADOLMA_FORM_FIELDS},
     "edvden_azadolma": {"file_fields": _EDVDEN_AZADOLMA_FILE_FIELDS, "form_fields": _EDVDEN_AZADOLMA_FORM_FIELDS},
 }
+
+
+LISENZIYA_DOC_TYPES = {"xususi_lisenziya", "umumi_lisenziya"}
 
 
 def get_schema(doc_type: str) -> dict:

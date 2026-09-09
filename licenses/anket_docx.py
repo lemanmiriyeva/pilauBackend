@@ -15,12 +15,25 @@ Axın:
 QEYD: Uyğunlaşdırma mətn əsaslıdır (normallaşdırılmış müqayisə) - Word sənədində
 sətir sırası və ya əlavə boşluqlar problem yaratmır, AMMA sətrin birinci sütunu
 (Sahə adı) mümkün qədər orijinal etiketə (və ya field key-inə) yaxın olmalıdır.
+
+"checkbox_list" tipli sahələr (məs. "İstinad maddəsi" bəndləri) üçün hər bir
+seçim (bənd) öz sətrində "☐"/"☑" işarəsi ilə göstərilir - istifadəçi aid olan
+bəndin qarşısındakı "☐" işarəsini "☑" və ya "X" ilə əvəz edir. Bu, real Word
+"content control" checkbox-larından fərqli olaraq sadə mətndir, ona görə bütün
+Word versiyalarında (o cümlədən mobil/onlayn) problemsiz açılır və geri
+yükləndikdə etibarlı şəkildə oxuna bilir.
+
+"computed" (sistem tərəfindən avtomatik hesablanan, məs. "Lisenziya
+kateqoriyası") sahələr şablonda GÖSTƏRİLMİR - onların dəyəri yalnız sənəd
+göndəriləndən sonra bəndlərə əsasən müəyyən olunur.
 """
 
 import io
 import re
 
 from docx import Document
+
+_CHECKED_MARKS = ("☑", "✓", "✔", "x", "X", "V", "v", "+")
 
 
 def _normalize_label(text):
@@ -68,6 +81,20 @@ def build_anket_template(schema, applicant_name="", voen="", title="Lisenziya an
         name_row[1].text = applicant_name
 
     for field in schema.get("form_fields", []):
+        # Sistem tərəfindən avtomatik hesablanan sahələr (məs. "Lisenziya
+        # kateqoriyası") şablonda görünmür - istifadəçi bunları doldurmur.
+        if field.get("computed"):
+            continue
+
+        if field.get("type") == "checkbox_list":
+            for opt in field.get("options", []):
+                opt_key = opt["key"] if isinstance(opt, dict) else opt[0]
+                opt_label = opt["label"] if isinstance(opt, dict) else opt[1]
+                row = table.add_row().cells
+                row[0].text = f"{field.get('label', field.get('key', ''))} — {opt_label}"
+                row[1].text = "☐"
+            continue
+
         row = table.add_row().cells
         label = field.get("label", field.get("key", ""))
         options = field.get("options")
@@ -105,14 +132,30 @@ def parse_anket_template(file_obj, schema):
     # Sahə etiketlərini (label/key) normallaşdırıb axtarış üçün lüğət qururuq.
     field_lookup = {}
     field_by_key = {}
+    # checkbox_list sahələr üçün ayrıca lüğət: "sahə etiketi — bənd etiketi" (normallaşmış) -> (field_key, option_key)
+    checkbox_lookup = {}
+    checkbox_field_keys = set()
     for field in schema.get("form_fields", []):
+        if field.get("computed"):
+            continue  # sistem hesablayır, şablonda sətri yoxdur
         field_by_key[field["key"]] = field
+        if field.get("type") == "checkbox_list":
+            checkbox_field_keys.add(field["key"])
+            field_label = field.get("label", field.get("key", ""))
+            for opt in field.get("options", []):
+                opt_key = opt["key"] if isinstance(opt, dict) else opt[0]
+                opt_label = opt["label"] if isinstance(opt, dict) else opt[1]
+                norm = _normalize_label(f"{field_label} — {opt_label}")
+                if norm:
+                    checkbox_lookup[norm] = (field["key"], opt_key)
+            continue
         for candidate in (field.get("label"), field.get("key")):
             norm = _normalize_label(candidate)
             if norm:
                 field_lookup[norm] = field["key"]
 
     values = {}
+    checked_bends = {key: [] for key in checkbox_field_keys}
     voen_value = None
 
     for row in table.rows[1:]:  # ilk sətir header - keçirik
@@ -139,6 +182,20 @@ def parse_anket_template(file_obj, schema):
         if norm_label in ("muessisenin_adi", "musessisenin_adi", "muraciet_edenin_adi"):
             continue  # applicant_name ayrıca idarə olunur, anket sahəsi deyil
 
+        # checkbox_list sətri olub-olmadığını yoxlayırıq (məs. "İstinad maddəsi — VI bənd").
+        checkbox_match = checkbox_lookup.get(norm_label)
+        if not checkbox_match:
+            for norm_candidate, pair in checkbox_lookup.items():
+                if norm_candidate and (norm_candidate in norm_label or norm_label in norm_candidate):
+                    checkbox_match = pair
+                    break
+        if checkbox_match:
+            field_key, option_key = checkbox_match
+            is_checked = any(mark in raw_value for mark in _CHECKED_MARKS)
+            if is_checked:
+                checked_bends[field_key].append(option_key)
+            continue
+
         matched_key = field_lookup.get(norm_label)
 
         if not matched_key:
@@ -163,5 +220,8 @@ def parse_anket_template(file_obj, schema):
                 values[matched_key] = option_key or raw_value
             else:
                 values[matched_key] = raw_value
+
+    for field_key, checked_keys in checked_bends.items():
+        values[field_key] = checked_keys
 
     return {"values": values, "voen": voen_value, "matched_count": len(values)}

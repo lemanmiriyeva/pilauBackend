@@ -187,6 +187,14 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
         certificate.signed_at = timezone.now()
         certificate.save(update_fields=["is_signed", "signature_method", "signed_phone", "signed_at"])
 
+        # "Verilmə tarixi" istifadəçi tərəfindən doldurulmur - lisenziya YALNIZ
+        # imzalandıqdan sonra rəsmi "verilmiş" sayılır, ona görə tarix də məhz
+        # bu anda (ilk imza anında) sənədə yazılır.
+        document = certificate.permit_document
+        if not document.issue_date:
+            document.issue_date = certificate.signed_at.date()
+            document.save(update_fields=["issue_date"])
+
         notify_certificate_signed(certificate.permit_document, certificate)
 
         return Response(LicenseCertificateSerializer(certificate).data)

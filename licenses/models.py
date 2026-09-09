@@ -2,7 +2,10 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from licenses.field_schema import DOC_TYPES, STATUS_CHOICES, SUBMISSION_MODES
+from licenses.field_schema import (
+    DOC_TYPES, LISENZIYA_DOC_TYPES, LISENZIYA_KATEQORIYA_LABELS, STATUS_CHOICES,
+    SUBMISSION_MODES, compute_lisenziya_kateqoriya,
+)
 
 
 APPROVAL_STAGE_CHOICES = (
@@ -122,6 +125,20 @@ class PermitDocument(models.Model):
 
     def save(self, *args, **kwargs):
         creating = self._state.adding
+
+        # "Lisenziya" (Xüsusi/Ümumi) üçün kateqoriyanı istifadəçi seçmir - istinad
+        # maddəsindəki bəndlərin hamısı işarələnibsə Ümumi, əks halda Xüsusi olur.
+        # Frontend tək bir "Yeni lisenziya" forması göstərir və doc_type üçün
+        # "xususi_lisenziya"/"umumi_lisenziya"-dan hər hansı birini (fərq etməz)
+        # göndərir - əsl dəyəri həmişə burada, backend-də təyin olunur.
+        if self.doc_type in LISENZIYA_DOC_TYPES:
+            selected_bends = (self.form_data or {}).get("istinad_maddesi_bendleri") or []
+            self.doc_type = compute_lisenziya_kateqoriya(selected_bends)
+            self.form_data = {
+                **(self.form_data or {}),
+                "kateqoriya": LISENZIYA_KATEQORIYA_LABELS[self.doc_type],
+            }
+
         if not self.number:
             self.number = _default_number(self.doc_type)
         # Bu kateqoriyada mərhələli təsdiq söndürülübsə, yeni sənəd birbaşa aktiv olaraq

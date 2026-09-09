@@ -212,7 +212,7 @@ def generate_permit_pdf(document) -> bytes:
         c.showPage()
         y = PAGE_H - MARGIN
     y = section_title("Etibarlılıq müddəti", y)
-    issue_str = document.issue_date.strftime("%d.%m.%Y") if document.issue_date else "Status təsdiqləndikdən sonra görünəcək"
+    issue_str = document.issue_date.strftime("%d.%m.%Y") if document.issue_date else "Lisenziya imzalandıqdan sonra görünəcək"
     expiry_str = document.expiry_date.strftime("%d.%m.%Y") if document.expiry_date else "Müddətsiz"
     row_h = max(
         two_col_field("Verilmə tarixi", issue_str, y, 0),

@@ -83,7 +83,12 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
             "issue_date", "expiry_date", "status",
             "number",
         ]
-        read_only_fields = ["id", "number"]
+        # "Verilmə tarixi" və "Status" sistem tərəfindən idarə olunur (bax
+        # PermitDocument.save/approve_stage/reject və LicenseCertificateView.sign) -
+        # müraciət yaradılarkən istifadəçi/klient tərəfindən göndərilsə belə nəzərə
+        # alınmamalıdır. "Bitmə tarixi" də eyni səbəbdən (yalnız EXPIRING_DOC_TYPES
+        # üçün avtomatik hesablanır) read-only saxlanılır.
+        read_only_fields = ["id", "number", "issue_date", "expiry_date", "status"]
 
     def validate(self, attrs):
         doc_type = attrs.get("doc_type")
@@ -95,10 +100,17 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
 
         schema = get_schema(doc_type)
         form_data = attrs.get("form_data") or {}
-        missing = [
-            f["label"] for f in schema["form_fields"]
-            if f.get("required") and not f.get("auto") and not str(form_data.get(f["key"], "")).strip()
-        ]
+        missing = []
+        for f in schema["form_fields"]:
+            if not f.get("required") or f.get("auto") or f.get("computed"):
+                continue
+            value = form_data.get(f["key"])
+            if f.get("type") == "checkbox_list":
+                is_empty = not value
+            else:
+                is_empty = not str(value or "").strip()
+            if is_empty:
+                missing.append(f["label"])
         if missing:
             raise serializers.ValidationError({"form_data": f"Bu sahələr tələb olunur: {', '.join(missing)}"})
         return attrs
