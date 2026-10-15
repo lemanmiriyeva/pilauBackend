@@ -1,9 +1,35 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from permissions_module.models import UserModulePermission
 
+from .constants import DEFAULT_INITIAL_PASSWORD
 from .models import PasswordResetCode, User
+
+
+class UserAddForm(forms.ModelForm):
+    """Admin paneldə "İstifadəçi əlavə et" formu - şifrə sahəsi YOXDUR.
+
+    Django-nun standart UserCreationForm-u password1/password2 tələb edir və bu şifrələri
+    AUTH_PASSWORD_VALIDATORS-dan (min. 10 simvol) keçirir - ilkin şifrə "AA123456!" isə
+    9 simvoldur, ona görə həmin formada heç vaxt qəbul olunmurdu. Burada şifrə soruşulmur:
+    hər yeni istifadəçiyə sabit ilkin şifrə təyin olunur və ilk girişdə (2FA qurulandan sonra)
+    onu dəyişməyə məcbur edilir (bax authentication/constants.py, İnzibatçı paneli API-si ilə
+    eyni davranış - views.CreateUserView)."""
+
+    class Meta:
+        model = User
+        fields = ("username", "email", "first_name", "last_name")
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(DEFAULT_INITIAL_PASSWORD)
+        user.must_change_password = True
+        if commit:
+            user.save()
+            self._save_m2m()
+        return user
 
 
 class UserModulePermissionInline(admin.TabularInline):
@@ -37,6 +63,15 @@ class UserAdmin(DjangoUserAdmin):
     readonly_fields = ("totp_secret_encrypted", "failed_login_attempts", "locked_at")
     inlines = [UserModulePermissionInline]
 
+    # "İstifadəçi əlavə et" səhifəsi: şifrə sahəsi yoxdur, ilkin şifrə avtomatik təyin olunur.
+    add_form = UserAddForm
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("username", "email", "first_name", "last_name"),
+        }),
+    )
+
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("Əlavə məlumat", {"fields": ("phone", "fin_kod", "id_card_serial", "organization")}),
         # Təhlükəsizlik bölməsinə must_change_password əlavə olundu
@@ -47,7 +82,7 @@ class UserAdmin(DjangoUserAdmin):
         )}),
     )
 
-    actions = ["unlock_users", "reset_totp_for_users", "force_password_change"]
+    actions = ["unlock_users", "reset_totp_for_users", "force_password_change", "reset_to_initial_password"]
 
     @admin.action(description="Seçilmiş istifadəçilərin kilidini aç")
     def unlock_users(self, request, queryset):
@@ -58,7 +93,29 @@ class UserAdmin(DjangoUserAdmin):
         for user in queryset:
             user.reset_totp()
 
-    # İrəlidəadmin paneldən toplu şəkildə istifadəçini şifrə dəyişməyə məcbur etmək üçün action da əlavə edə bilərsiniz:
+    @admin.action(description=f"Seçilmiş istifadəçiləri ilkin şifrəyə ({DEFAULT_INITIAL_PASSWORD}) sıfırla (ilk giriş axını yenidən başlayır)")
+    def reset_to_initial_password(self, request, queryset):
+        # 2FA da sıfırlanır: giriş axınında şifrə dəyişdirmə addımı yalnız 2FA QURULANDAN sonra
+        # soruşulur (bax TOTPSetupConfirmView). 2FA sıfırlanmasa, istifadəçi ilkin şifrə ilə
+        # qalardı, çünki normal giriş (TOTPVerifyView) şifrə dəyişdirməyə yönləndirmir.
+        count = 0
+        for user in queryset:
+            user.set_password(DEFAULT_INITIAL_PASSWORD)
+            user.must_change_password = True
+            user.failed_login_attempts = 0
+            user.is_locked = False
+            user.locked_at = None
+            user.totp_secret_encrypted = None
+            user.totp_confirmed = False
+            user.save()
+            count += 1
+        self.message_user(
+            request,
+            f"{count} istifadəçi ilkin şifrəyə sıfırlandı. İlk girişdə 2FA qurub yeni şifrə təyin edəcəklər.",
+            messages.SUCCESS,
+        )
+
+    # Admin paneldən toplu şəkildə istifadəçini şifrə dəyişməyə məcbur etmək üçün action:
     @admin.action(description="Seçilmiş istifadəçiləri şifrə dəyişməyə məcbur et (must_change_password=True)")
     def force_password_change(self, request, queryset):
         queryset.update(must_change_password=True)

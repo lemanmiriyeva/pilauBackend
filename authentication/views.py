@@ -10,6 +10,7 @@ import pyotp
 
 from organizations.permissions import IsStaffOrOrgAdmin, is_full_admin, scoped_organization_ids
 
+from .constants import DEFAULT_INITIAL_PASSWORD
 from .models import PasswordResetCode, TOTPResetCode, User
 from .serializers import (
     AdminResetTOTPSerializer,
@@ -462,9 +463,6 @@ class MyOrganizationOptionsView(APIView):
 # ---------------------------------------------------------------------------
 # Admin-only: istifadəçi yaratma, kilidi açma, 2FA sıfırlama
 # ---------------------------------------------------------------------------
-
-DEFAULT_INITIAL_PASSWORD = "AA123456!"
-
 
 class CreateUserView(APIView):
     """Image 3-dəki 'Yeni istifadəçi' formu. Yalnız admin/idarəçi çağıra bilər.

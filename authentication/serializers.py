@@ -186,8 +186,8 @@ class UserListSerializer(serializers.ModelSerializer):
 class CreateUserSerializer(serializers.ModelSerializer):
     """Yeni istifadəçi yaratmaq üçün (Image 3-dəki form) - admin/idarəçi tərəfindən istifadə olunur.
 
-    'password' göndərilməsə, təsadüfi şifrə yaradılır və istifadəçiyə şifrə-təyini e-poçtu göndərilir
-    (dizaynda parol sahəsi yoxdur - Image 3).
+    'password' göndərilməsə, sabit ilkin şifrə (bax authentication/constants.py ->
+    DEFAULT_INITIAL_PASSWORD) təyin olunur, e-poçt göndərilmir (dizaynda parol sahəsi yoxdur - Image 3).
     'modules' - Image 3-dəki 'İcazə veriləcək modulları seçin' + 'Status' (Baxış/Redaktə/Təsdiq)
     hissəsi üçün, [{"module": <id>, "can_view": bool, "can_edit": bool, "can_approve": bool}, ...]
     """
