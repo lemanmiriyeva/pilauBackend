@@ -22,14 +22,20 @@ class PermitDocumentFileSerializer(serializers.ModelSerializer):
 class PermitDocumentListSerializer(serializers.ModelSerializer):
     """Image 1 - siyahı cədvəli üçün."""
     category = serializers.CharField(source="get_doc_type_display", read_only=True)
+    certificate_id = serializers.SerializerMethodField()
 
     class Meta:
         model = PermitDocument
         fields = [
             "id", "number", "title", "doc_type", "category",
             "applicant_name", "issue_date", "expiry_date", "status", "approval_stage",
+            "certificate_id",
         ]
 
+    def get_certificate_id(self, obj):
+        certificate = getattr(obj, "certificate", None)
+        return certificate.id if certificate else None
+    
 
 class PermitDocumentDetailSerializer(serializers.ModelSerializer):
     """Image 3/4 - 'Bax' düyməsi ilə açılan detal görünüşü."""

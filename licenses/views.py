@@ -365,7 +365,7 @@ class ReviewSummaryView(APIView):
 
         user = request.user
         is_reviewer = bool(
-            user.is_superuser or user.is_staff or getattr(user, "is_org_admin", False)
+            user.is_superuser or user.is_staff
             or OrgReviewerPermission.objects.filter(user=user, can_review=True).exists()
             or ApproverPermission.objects.filter(user=user, can_approve=True).exists()
             or _user_is_any_approver(user)
@@ -391,8 +391,7 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
     """İdxal/İxrac icazə sənədləri - Image 1 siyahısı və Image 2/3/4 yaratma axını."""
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    queryset = PermitDocument.objects.select_related("organization", "authorized_person").prefetch_related("files")
-
+    queryset = PermitDocument.objects.select_related("organization", "authorized_person", "certificate").prefetch_related("files")
     def get_serializer_class(self):
         if self.action == "list":
             return PermitDocumentListSerializer
@@ -421,6 +420,8 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
             org_ids = scoped_organization_ids(user)
             qs = qs.filter(organization_id__in=org_ids) if org_ids else qs.filter(created_by=user)
 
+        if self.request.query_params.get("mine") in ("1", "true", "True"):
+            qs = qs.filter(created_by=user)
         # ---------------------------------------------------------
         # Approval stage filter
         # ---------------------------------------------------------

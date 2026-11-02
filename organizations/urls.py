@@ -111,6 +111,8 @@ urlpatterns = [
          name="organization_nomenclature_detail"),
     path("<int:pk>/permit-documents/", profile_views.OrganizationPermitDocumentsView.as_view(),
          name="organization_permit_documents"),
+    path("<int:pk>/turnover/", profile_views.OrganizationTurnoverView.as_view(),
+         name="organization_turnover"),
     path("<int:pk>/activity-documents/", profile_views.OrganizationActivityDocumentsView.as_view(),
          name="organization_activity_documents"),
     path("activity-documents/<int:pk>/", profile_views.OrganizationActivityDocumentDetailView.as_view(),

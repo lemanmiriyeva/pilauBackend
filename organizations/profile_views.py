@@ -244,6 +244,92 @@ class OrganizationPermitDocumentsView(APIView):
         ])
 
 
+def _num(value):
+    """form_data-dakı say/miqdarı rəqəmə çevirir; boş və ya yanlışdırsa None."""
+    try:
+        if value in (None, ""):
+            return None
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+class OrganizationTurnoverView(APIView):
+    """Təşkilatın dövriyyəsi: xarici (idxal/ixrac) və yerli (daxili satış) sənədlər.
+
+    GET /api/organizations/<id>/turnover/
+
+    İLKİN VERSİYA - təsnifat qaydası (dəqiqləşdiriləndə yalnız _classify dəyişəcək):
+      - doc_type == 'idxal'  -> xarici / idxal
+      - doc_type == 'ixrac'  -> xarici / ixrac
+      - doc_type == 'xususi_satis' və form_data['satis_novu']:
+            'idxal' / 'ixrac' -> xarici, 'daxili_satis' -> yerli
+    Miqdar sahələri (tesdiq_olunan_say / faktiki_miqdar / qaliq) hələ avtomatik
+    doldurulmur - yoxdursa None qaytarılır, frontend '—' göstərir.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @staticmethod
+    def _classify(doc):
+        fd = doc.form_data or {}
+        if doc.doc_type in ("idxal", "ixrac"):
+            return "xarici", doc.doc_type
+        if doc.doc_type == "xususi_satis":
+            kind = fd.get("satis_novu")
+            if kind == "daxili_satis":
+                return "yerli", "daxili_satis"
+            if kind in ("idxal", "ixrac"):
+                return "xarici", kind
+        return None, None
+
+    def get(self, request, pk):
+        from licenses.models import PermitDocument
+
+        org = get_visible_organization(request, pk)
+        qs = PermitDocument.objects.filter(
+            organization=org, doc_type__in=("idxal", "ixrac", "xususi_satis"),
+        ).order_by("-created_at")[:500]
+
+        rows = []
+        for d in qs:
+            scope, direction = self._classify(d)
+            if not scope:
+                continue
+            fd = d.form_data or {}
+            approved = _num(fd.get("tesdiq_olunan_say"))
+            actual = _num(fd.get("faktiki_miqdar"))
+            remaining = _num(fd.get("qaliq"))
+            if remaining is None and approved is not None and actual is not None:
+                remaining = approved - actual
+            rows.append({
+                "id": d.id,
+                "number": d.number,
+                "doc_type": d.doc_type,
+                "scope": scope,                      # 'xarici' | 'yerli'
+                "direction": direction,              # 'idxal' | 'ixrac' | 'daxili_satis'
+                "product": fd.get("mehsul") or fd.get("malin_tesviri") or d.title or "",
+                "approved_qty": approved,
+                "actual_qty": actual,
+                "remaining_qty": remaining,
+                "status": d.status,
+                "issue_date": d.issue_date,
+            })
+
+        def _sum(items, key):
+            vals = [r[key] for r in items if r[key] is not None]
+            return sum(vals) if vals else None
+
+        summary = {}
+        for scope in ("xarici", "yerli"):
+            items = [r for r in rows if r["scope"] == scope]
+            summary[scope] = {
+                "count": len(items),
+                "approved_qty": _sum(items, "approved_qty"),
+                "actual_qty": _sum(items, "actual_qty"),
+                "remaining_qty": _sum(items, "remaining_qty"),
+            }
+        return Response({"summary": summary, "results": rows})
+
 def _document_payload(doc):
     return {
         "id": doc.id,
