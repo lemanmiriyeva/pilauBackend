@@ -22,6 +22,9 @@ class Organization(models.Model):
     full_name = models.CharField("Tam adı", max_length=255)
     voen = models.CharField("VÖEN", max_length=20, unique=True)
     state_reg_number = models.CharField("Dövlət qeydiyyat nömrəsi", max_length=50, blank=True)
+    director_name = models.CharField("Direktor (ad, soyad)", max_length=255, blank=True)
+    director_phone = models.CharField("Direktorun telefon nömrəsi", max_length=30, blank=True)
+    director_email = models.EmailField("Direktorun e-poçt ünvanı", blank=True)
 
     # --- Əlaqə məlumatları ---
     email = models.EmailField("Əsas elektron poçt ünvanı", blank=True)
@@ -132,3 +135,94 @@ class OrganizationPosition(models.Model):
     )
 
     name = models.CharField(max_length=255)
+
+
+class OrganizationDocument(models.Model):
+    """Təşkilatın fəaliyyətinə dair sənədlər (nizamnamə, dövlət qeydiyyatı şəhadətnaməsi və s.).
+    Lisenziya/icazə sənədlərindən (licenses.PermitDocument) fərqli olaraq bunlar təşkilatın
+    profilinə birbaşa yüklənən ümumi fayllardır."""
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="activity_documents")
+    title = models.CharField("Sənədin adı", max_length=255)
+    file = models.FileField("Fayl", upload_to="organization_documents/%Y/%m/")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Fəaliyyətə dair sənəd"
+        verbose_name_plural = "Fəaliyyətə dair sənədlər"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} ({self.organization.full_name})"
+
+
+class OrganizationNomenclature(models.Model):
+    """Təşkilata məxsus nomenklatura - təşkilatın istehsal etdiyi/təmir etdiyi/saxladığı
+    məhsul və avadanlıqların siyahısı (ad, kod, kateqoriya, ölçü vahidi)."""
+
+    CATEGORY_CHOICES = [
+        ("herbi_texnika", "Hərbi texnika"),
+        ("herbi_silah", "Hərbi silah"),
+        ("doyus_sursati", "Döyüş sursatı"),
+        ("avadanliq", "Avadanlıq"),
+        ("diger", "Digər"),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="nomenclature_items")
+    name = models.CharField("Adı", max_length=255)
+    code = models.CharField("Nomenklatura kodu", max_length=100, blank=True)
+    category = models.CharField("Kateqoriya", max_length=20, choices=CATEGORY_CHOICES, default="avadanliq")
+    unit = models.CharField("Ölçü vahidi", max_length=30, blank=True)
+    note = models.TextField("Qeyd", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Nomenklatura"
+        verbose_name_plural = "Nomenklatura"
+        ordering = ["category", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.full_name})"
+
+
+class SubordinateInstitution(models.Model):
+    """Təşkilata tabe olan qurum (yalnız məlumat qeydi - sistem təşkilatı deyil).
+    Ad və VÖEN məcburidir; ünvan və direktor könüllüdür."""
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="subordinates")
+    name = models.CharField("Adı", max_length=255)
+    voen = models.CharField("VÖEN", max_length=20)
+    address = models.CharField("Ünvan", max_length=500, blank=True)
+    director_name = models.CharField("Direktor", max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Tabeli qurum"
+        verbose_name_plural = "Tabeli qurumlar"
+        ordering = ["name"]
+        unique_together = ("organization", "voen")
+
+    def __str__(self):
+        return f"{self.name} ({self.voen})"
+
+
+class FixedAsset(models.Model):
+    """Təşkilatın əsas avadanlığı: ad + inventar kodu (+ könüllü qrup)."""
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="fixed_assets")
+    name = models.CharField("Avadanlığın adı", max_length=255)
+    inventory_code = models.CharField("İnventar kodu", max_length=100)
+    group = models.CharField("Qrup", max_length=150, blank=True)
+    note = models.TextField("Qeyd", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Əsas avadanlıq"
+        verbose_name_plural = "Əsas avadanlıqlar"
+        ordering = ["group", "name", "inventory_code"]
+        unique_together = ("organization", "inventory_code")
+
+    def __str__(self):
+        return f"{self.name} [{self.inventory_code}]"

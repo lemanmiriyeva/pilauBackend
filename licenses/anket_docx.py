@@ -234,15 +234,14 @@ def build_anket_template(schema, applicant_name="", voen="", title="Lisenziya an
 
                 if group is not None and group != last_group:
                     header_cells = table.add_row().cells
-                    _merge_as_header(header_cells, f"{group}. {group_label}")
+                    _merge_as_header(header_cells, group_label)
                     last_group = group
 
                 opt_key = opt["key"] if isinstance(opt, dict) else opt[0]
-                opt_number = opt.get("number", "") if isinstance(opt, dict) else ""
                 opt_label = opt["label"] if isinstance(opt, dict) else opt[1]
 
                 row = table.add_row().cells
-                row[0].text = f"{opt_number} {opt_label}".strip()
+                row[0].text = opt_label
                 _insert_checkbox_control(row[1], checked=False)
             continue
 
@@ -294,16 +293,11 @@ def parse_anket_template(file_obj, schema):
             checkbox_field_keys.add(field["key"])
             for opt in field.get("options", []):
                 opt_key = opt["key"] if isinstance(opt, dict) else opt[0]
-                opt_number = opt.get("number", "") if isinstance(opt, dict) else ""
                 opt_label = opt["label"] if isinstance(opt, dict) else opt[1]
-                norm = _normalize_label(f"{opt_number} {opt_label}")
-                if norm:
-                    checkbox_lookup[norm] = (field["key"], opt_key)
-                # nömrəsiz variant da (ehtiyat üçün) - istifadəçi sətri əl ilə
-                # dəyişdirib nömrəni silmiş ola bilər.
-                norm_no_number = _normalize_label(opt_label)
-                if norm_no_number:
-                    checkbox_lookup.setdefault(norm_no_number, (field["key"], opt_key))
+                opt_group_label = opt.get("group_label", "") if isinstance(opt, dict) else ""
+                # Alt-bənd adları qruplarda təkrarlanır ("saxlanılması" həm texnikada, həm
+                # silahda var) - ona görə açar (qrup başlığı, bənd adı) cütüdür.
+                checkbox_lookup[(_normalize_label(opt_group_label), _normalize_label(opt_label))] = (field["key"], opt_key)
             continue
         for candidate in (field.get("label"), field.get("key")):
             norm = _normalize_label(candidate)
@@ -313,6 +307,7 @@ def parse_anket_template(file_obj, schema):
     values = {}
     checked_bends = {key: [] for key in checkbox_field_keys}
     voen_value = None
+    current_group_norm = ""  # son görünən bənd qrupu başlığı (normallaşmış)
 
     for row in table.rows[1:]:  # ilk sətir header - keçirik
         cells = row.cells
@@ -330,6 +325,7 @@ def parse_anket_template(file_obj, schema):
         # başlığı sətirləri (2 xana birləşdirilib, hər ikisi eyni mətni
         # göstərir) - bunlar məlumat daşımır, keçirik.
         if raw_label == raw_value:
+            current_group_norm = _normalize_label(raw_label)
             continue
 
         # Template generasiyasında "select" sahələrin etiketinə köhnə
@@ -352,13 +348,8 @@ def parse_anket_template(file_obj, schema):
         if raw_value == _DROPDOWN_PLACEHOLDER:
             continue
 
-        # checkbox_list sətri olub-olmadığını yoxlayırıq (məs. "6.1. layihələndirilməsi").
-        checkbox_match = checkbox_lookup.get(norm_label)
-        if not checkbox_match:
-            for norm_candidate, pair in checkbox_lookup.items():
-                if norm_candidate and (norm_candidate in norm_label or norm_label in norm_candidate):
-                    checkbox_match = pair
-                    break
+        # checkbox_list sətri olub-olmadığını yoxlayırıq: cari qrup başlığı + bənd adı.
+        checkbox_match = checkbox_lookup.get((current_group_norm, norm_label))
         if checkbox_match:
             field_key, option_key = checkbox_match
             is_checked = any(mark in raw_value for mark in _CHECKED_MARKS)

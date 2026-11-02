@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -84,7 +84,7 @@ class OrganizationTableListView(generics.ListAPIView):
 
         if search:
             qs = qs.filter(
-                full_name__icontains=search
+                Q(full_name__icontains=search) | Q(voen__icontains=search) | Q(director_name__icontains=search)
             )
 
         return qs
@@ -113,7 +113,7 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
     Qurum admini - görməsi öz təşkilatı + alt-təşkilatları daxilindədir (queryset), AMMA
     redaktə (PATCH/PUT) YALNIZ məhz ÖZ təşkilatı (alt-təşkilatlar DAXİL DEYİL) üçündür - bax
     check_object_permissions. Silmək (DELETE) yalnız staff/superuser-ə açıqdır."""
-    permission_classes = [IsStaffOrOrgAdminForWrite]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = OrganizationDetailSerializer
 
     def get_queryset(self):
@@ -126,9 +126,25 @@ class OrganizationDetailView(generics.RetrieveUpdateDestroyAPIView):
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
         if request.method in ("PATCH", "PUT") and not is_full_admin(request.user):
-            if obj.id != request.user.organization_id:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied("Yalnız öz təşkilatınızı redaktə edə bilərsiniz.")
+            # Öz təşkilatının admini və ya "Təşkilatlar" modulunda 'Redaktə' icazəsi olan öz işçisi
+            from rest_framework.exceptions import PermissionDenied
+            from .profile_views import can_org_action
+            if not can_org_action(request.user, obj, "edit"):
+                raise PermissionDenied("Təşkilatı redaktə etmək üçün icazəniz yoxdur (yalnız öz təşkilatınızı).")
+
+    def update(self, request, *args, **kwargs):
+        # Qurum admini öz təşkilatında YALNIZ ad, direktor, ünvan və əlaqə məlumatlarını dəyişə bilər.
+        # VÖEN, status (is_active), iyerarxiya, kod və s. yalnız Nazirlik admininə aiddir -
+        # göndərilsə belə, sakitcə nəzərə alınmır.
+        if not is_full_admin(request.user):
+            from .profile_views import ORG_ADMIN_EDITABLE_FIELDS
+            allowed = {k: v for k, v in request.data.items() if k in ORG_ADMIN_EDITABLE_FIELDS}
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=allowed, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        return super().update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
         if not is_full_admin(request.user):
@@ -381,6 +397,9 @@ class OrganizationDepartmentsByOrganizationView(generics.ListAPIView):
 
     def get_queryset(self):
         organization_id = self.kwargs["organization_id"]
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None and int(organization_id) not in org_ids:
+            return OrganizationDepartment.objects.none()
 
         return OrganizationDepartment.objects.filter(
             organization_id=organization_id
@@ -402,6 +421,9 @@ class OrganizationPositionsByOrganizationView(generics.ListAPIView):
 
     def get_queryset(self):
         organization_id = self.kwargs["organization_id"]
+        org_ids = scoped_organization_ids(self.request.user)
+        if org_ids is not None and int(organization_id) not in org_ids:
+            return OrganizationPosition.objects.none()
 
         return OrganizationPosition.objects.filter(
             organization_id=organization_id

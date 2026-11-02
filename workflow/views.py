@@ -238,6 +238,10 @@ class Stage1PermissionsView(APIView):
             pk=organization_id
         )
 
+        _org_ids = scoped_organization_ids(request.user)
+        if _org_ids is not None and organization.id not in _org_ids:
+            return Response({"detail": "Bu təşkilata baxmaq hüququnuz yoxdur."}, status=403)
+
         # ------------------------------------------------------------
         # USERLƏR
         # ------------------------------------------------------------
@@ -337,6 +341,9 @@ class Stage1PermissionsView(APIView):
             Organization,
             pk=organization_id
         )
+
+        if not is_full_admin(request.user) and request.user.organization_id != organization.id:
+            return Response({"detail": "Yalnız öz təşkilatınızı dəyişə bilərsiniz."}, status=403)
 
         serializer = PermissionToggleSerializer(
             data=request.data

@@ -46,10 +46,10 @@ DOC_TYPE_MODULE_KEY = {
     "ixrac": "idxal-ixrac",
     "idxal": "idxal-ixrac",
     # "İstehsal" bundan sonra "Lisenziya" adı altında Xüsusi/Ümumi olaraq
-    # bölünüb, amma hər ikisi hələlik eyni "istehsal" icazə modulunun altındadır.
-    "istehsal": "istehsal",
-    "xususi_lisenziya": "istehsal",
-    "umumi_lisenziya": "istehsal",
+    # bölünüb, amma hər ikisi eyni "lisenziya" icazə modulunun altındadır.
+    "istehsal": "lisenziya",
+    "xususi_lisenziya": "lisenziya",
+    "umumi_lisenziya": "lisenziya",
     "xususi_satis": "xususi-satis",
     "edv_guzest": "edv-guzesti",
 }
@@ -137,7 +137,7 @@ class LicenseCertificateView(viewsets.ReadOnlyModelViewSet):
 
         # 'Sənədlərim' - qurum admini olub-olmamasından asılı olmayaraq HƏR İSTİFADƏÇİ yalnız
         # ÖZ yaratdığı sənədlərdən yaranan sertifikatları görür (təşkilatın digər sənədləri
-        # üçün bax PermitDocumentViewSet - istehsal/idxal-ixrac/xüsusi-satış/ƏDV-güzəşt
+        # üçün bax PermitDocumentViewSet - lisenziya/idxal-ixrac/xüsusi-satış/ƏDV-güzəşt
         # siyahıları təşkilat üzrə geniş əhatəlidir, amma 'Sənədlərim' fərqli, şəxsi bir görünüşdür).
         return qs.filter(permit_document__created_by=user)
 
@@ -282,11 +282,11 @@ class ApprovalSettingsView(APIView):
     """Hər lisenziya kateqoriyası üçün AYRICA tənzimlənən keçid: mərhələli təsdiq açıq/qapalıdır
     (bax ApprovalSettings, PermitDocument.save). Bir kateqoriyanı söndürmək digərlərinə təsir etmir.
 
-    GET  ?doc_type=istehsal  - yalnız həmin kateqoriyanın vəziyyəti (sənəd yaratma səhifəsi
+    GET  ?doc_type=xususi_lisenziya  - yalnız həmin kateqoriyanın vəziyyəti (sənəd yaratma səhifəsi
                                 düymə mətnini seçmək üçün istifadə edir).
     GET  (parametrsiz)       - BÜTÜN kateqoriyaların siyahısı (Təsdiq axını səhifəsindəki
                                 switcher-lər üçün).
-    PATCH {"doc_type": "istehsal", "staged_approval_enabled": false} - yalnız admin/superuser.
+    PATCH {"doc_type": "xususi_lisenziya", "staged_approval_enabled": false} - yalnız admin/superuser.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -337,6 +337,14 @@ class ApplicantInfoView(APIView):
                 "voen": org.voen,
                 "code": org.code,
             },
+            "current_user": {
+                "id": None, "person_type": "main",
+                "full_name": f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                "fin_kod": request.user.fin_kod or "",
+                "department": request.user.department.name if request.user.department_id else "",
+                "position": request.user.position.name if request.user.position_id else "",
+                "email": request.user.email or "", "phone": request.user.phone or "",
+            },
             "authorized_persons": [
                 {
                     "id": p.id, "person_type": p.person_type, "full_name": p.full_name,
@@ -345,6 +353,38 @@ class ApplicantInfoView(APIView):
                 } for p in persons
             ],
         })
+
+
+class ReviewSummaryView(APIView):
+    """Ana səhifədəki 'Təsdiq gözləyənlər' kartı üçün: istifadəçi təsdiq/yoxlama hüququna malikdirmi
+    və hazırda onun qərarını gözləyən sənəd sayı (mərhələlər üzrə)."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from workflow.models import ApproverPermission, OrgReviewerPermission
+
+        user = request.user
+        is_reviewer = bool(
+            user.is_superuser or user.is_staff or getattr(user, "is_org_admin", False)
+            or OrgReviewerPermission.objects.filter(user=user, can_review=True).exists()
+            or ApproverPermission.objects.filter(user=user, can_approve=True).exists()
+            or _user_is_any_approver(user)
+        )
+        counts = {1: 0, 2: 0}
+        if is_reviewer:
+            qs = PermitDocument.objects.filter(status="gozleyir")
+            if not (user.is_superuser or user.is_staff or _user_is_any_approver(user)):
+                org_ids = scoped_organization_ids(user)
+                qs = qs.filter(organization_id__in=org_ids) if org_ids else qs.none()
+            configs = _workflow_configs()
+            for doc in qs:
+                if doc.approval_stage in counts and (
+                    user.is_superuser or user.is_staff
+                    or _user_can_approve_document(user, doc, configs.get(doc.doc_type))
+                ):
+                    counts[doc.approval_stage] += 1
+        return Response({"is_reviewer": is_reviewer, "stage1": counts[1], "stage2": counts[2],
+                         "total": counts[1] + counts[2]})
 
 
 class PermitDocumentViewSet(viewsets.ModelViewSet):
@@ -527,7 +567,7 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
 class LicenseStatsOverviewView(APIView):
     """Hesabatlar -> Statistik məlumatlar səhifəsi üçün.
 
-    GET /api/licenses/stats/overview/?doc_type=istehsal&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&granularity=day|month|year
+    GET /api/licenses/stats/overview/?doc_type=xususi_lisenziya&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&granularity=day|month|year
 
     - doc_type boş/göndərilməyibsə - BÜTÜN kateqoriyalar üzrə ümumi məlumat qaytarılır (əlavə
       olaraq 'by_doc_type' bölgüsü ilə - kateqoriyalar arası müqayisə üçün).

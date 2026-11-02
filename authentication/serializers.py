@@ -95,6 +95,7 @@ class UserOrganizationSerializer(serializers.Serializer):
     Employee-nin öz təşkilatı haqqında bilməli olduğu BÜTÜN əsas sahələr - yalnız
     full_name/voen deyil, əlaqə məlumatları da daxil olmaqla."""
     id = serializers.IntegerField()
+    code = serializers.CharField()
     full_name = serializers.CharField()
     voen = serializers.CharField()
     state_reg_number = serializers.CharField()
@@ -141,13 +142,14 @@ class UserSerializer(serializers.ModelSerializer):
             "fin_kod",
             "id_card_serial",
             "is_org_admin",
+            "rehber_kadr",
             "is_staff",
             "is_active",
             "is_locked",
             "totp_confirmed",
             "date_joined",
         ]
-        read_only_fields = ["id", "is_org_admin", "is_staff", "is_locked", "totp_confirmed", "date_joined"]
+        read_only_fields = ["id", "is_org_admin", "rehber_kadr", "is_staff", "is_locked", "totp_confirmed", "date_joined"]
 
 
 class UserListSerializer(serializers.ModelSerializer):

@@ -10,7 +10,7 @@ redaktə etmək kifayətdir - frontend formu avtomatik uyğunlaşır.
 DOC_TYPES = (
     ("ixrac", "İxrac"),
     ("idxal", "İdxal"),
-    ("istehsal", "İstehsal (köhnə)"),
+    ("istehsal", "Lisenziya (köhnə)"),
     ("xususi_lisenziya", "Xüsusi Lisenziya"),
     ("umumi_lisenziya", "Ümumi Lisenziya"),
     ("xususi_satis", "Xüsusi Satış"),
@@ -20,7 +20,7 @@ DOC_TYPES = (
 
 # Bax seed_modules_shell.py -> meta ("1 illik ..." / "Müddətsiz"): idxal/ixrac və ƏDV güzəşt
 # (gömrükdən azadolma / ƏDV-dən azadolma) 1 illikdir (təsdiqlənəndə bitmə tarixi avtomatik
-# +1 il qoyulur); istehsal və xüsusi satış isə müddətsizdir (bitmə tarixi boş qalır).
+# +1 il qoyulur); lisenziya və xüsusi satış isə müddətsizdir (bitmə tarixi boş qalır).
 # Bax: licenses/models.py -> PermitDocument.save()
 EXPIRING_DOC_TYPES = {"idxal", "ixrac", "gomrukden_azadolma", "edvden_azadolma"}
 
@@ -59,28 +59,30 @@ SUBMISSION_MODES = (
 # formda/Word şablonunda checkbox kimi işarələyir. Hüquqi mətn dəyişərsə və ya bənd
 # sayı artarsa, YALNIZ bu siyahını yeniləmək kifayətdir (key unikal olmalıdır) -
 # kateqoriya hesablaması (bax compute_lisenziya_kateqoriya) avtomatik uyğunlaşır.
-ISTINAD_MADDESI_BENDLERI = [
-    {"key": "bend_6_1", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
-     "number": "6.1.", "label": "layihələndirilməsi"},
-    {"key": "bend_6_2", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
-     "number": "6.2.", "label": "istehsalı və sınaqdan keçirilməsi"},
-    {"key": "bend_6_3", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
-     "number": "6.3.", "label": "quraşdırılması, montajı, təmiri və texniki xidmət göstərilməsi"},
-    {"key": "bend_6_4", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
-     "number": "6.4.", "label": "saxlanılması"},
-    {"key": "bend_6_5", "group": "6", "group_label": "Döyüş təyinatlı hərbi texnikanın və hərbi silahın:",
-     "number": "6.5.", "label": "utilizasiyası"},
-    {"key": "bend_7_1", "group": "7", "group_label": "Döyüş sursatının:",
-     "number": "7.1.", "label": "layihələndirilməsi"},
-    {"key": "bend_7_2", "group": "7", "group_label": "Döyüş sursatının:",
-     "number": "7.2.", "label": "istehsalı və sınaqdan keçirilməsi"},
-    {"key": "bend_7_3", "group": "7", "group_label": "Döyüş sursatının:",
-     "number": "7.3.", "label": "təmiri və texniki xidmət göstərilməsi"},
-    {"key": "bend_7_4", "group": "7", "group_label": "Döyüş sursatının:",
-     "number": "7.4.", "label": "saxlanılması"},
-    {"key": "bend_7_5", "group": "7", "group_label": "Döyüş sursatının:",
-     "number": "7.5.", "label": "utilizasiyası"},
+_BEND_SUB_ITEMS = [
+    ("1", "layihələndirilməsi"),
+    ("2", "istehsalı və sınaqdan keçirilməsi"),
+    ("3", "quraşdırılması, montajı, təmiri və texniki xidmət göstərilməsi"),
+    ("4", "saxlanılması"),
+    ("5", "utilizasiyası"),
 ]
+_BEND_SURSAT_SUB_ITEMS = [
+    ("1", "layihələndirilməsi"),
+    ("2", "istehsalı və sınaqdan keçirilməsi"),
+    ("3", "təmiri və texniki xidmət göstərilməsi"),
+    ("4", "saxlanılması"),
+    ("5", "utilizasiyası"),
+]
+# Qrup başlıqlarında və bəndlərdə nömrə yoxdur (6., 7., 6.1. ... silindi). "Döyüş təyinatlı
+# hərbi texnikanın və hərbi silahın" ayrıca "Hərbi texnikanın" və "Hərbi silahın" qruplarına bölünüb.
+ISTINAD_MADDESI_BENDLERI = (
+    [{"key": f"bend_texnika_{n}", "group": "texnika", "group_label": "Hərbi texnikanın:", "label": lbl}
+     for n, lbl in _BEND_SUB_ITEMS]
+    + [{"key": f"bend_silah_{n}", "group": "silah", "group_label": "Hərbi silahın:", "label": lbl}
+       for n, lbl in _BEND_SUB_ITEMS]
+    + [{"key": f"bend_sursat_{n}", "group": "sursat", "group_label": "Döyüş sursatının:", "label": lbl}
+       for n, lbl in _BEND_SURSAT_SUB_ITEMS]
+)
 
 LISENZIYA_KATEQORIYA_LABELS = {
     "umumi_lisenziya": "Ümumi Lisenziya",
@@ -89,12 +91,12 @@ LISENZIYA_KATEQORIYA_LABELS = {
 
 
 def compute_lisenziya_kateqoriya(selected_bend_keys) -> str:
-    """İstinad maddəsində (6.1-6.5 və 7.1-7.5 yarım-bəndləri) işarələnmiş
+    """İstinad maddəsində (texnika / silah / sursat yarım-bəndləri) işarələnmiş
     seçimlərə görə lisenziyanın kateqoriyasını ('umumi_lisenziya' /
     'xususi_lisenziya') təyin edir. İstifadəçi bunu seçmir - sistem avtomatik
     hesablayır (bax PermitDocument.save, licenses/models.py):
 
-      - Bütün 10 yarım-bənd işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
+      - Bütün 15 yarım-bənd işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
       - Yarım-bəndlərdən heç olmasa biri işarələnməyibsə (məhdudlaşdırılıb)  -> Xüsusi Lisenziya
     """
     all_keys = {b["key"] for b in ISTINAD_MADDESI_BENDLERI}
@@ -243,7 +245,7 @@ _ISTEHSAL_FILE_FIELDS = [
 # --- "Elektron müraciət forması" (Lisenziya anketi) - İstehsal lisenziyası (Image 3) ---
 _ISTEHSAL_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
-    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
+    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "text", "required": True},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
      "options": LICENSE_TYPE_CHOICES},
     {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
@@ -283,7 +285,7 @@ _LISENZIYA_FILE_FIELDS = [
 
 _LISENZIYA_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
-    {"key": "mehsulun_novu", "label": "Məhsulun növü", "type": "text", "required": True},
+    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "text", "required": True},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
      "options": LICENSE_TYPE_CHOICES},
     {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,

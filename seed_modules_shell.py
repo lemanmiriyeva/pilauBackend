@@ -62,12 +62,16 @@ Module.objects.get_or_create(
 )
 
 # --- 'Lisenziya' altinda alt-modullar ---
-# "İstehsal lisenziyası" adı "Lisenziya" olaraq dəyişdi (özü isə Xüsusi/Ümumi
+# Əvvəlki ad "Lisenziya" olaraq dəyişdi (özü isə Xüsusi/Ümumi
 # olaraq bölündü - bax licenses/field_schema.py). update_or_create istifadə
 # olunur ki, mövcud mühitlərdə menyu adı da yenilənsin (yalnız bu sətir üçün -
 # digər modullar əvvəlki kimi get_or_create ilə saxlanılıb).
+# Köhnə "istehsal" açarı "lisenziya" ilə əvəz olundu (URL: .../lisenziya-senedler/lisenziya).
+# Mövcud bazada modulu itirməmək üçün əvvəlcə köhnə açarlı sətir yenidən adlandırılır.
+if not Module.objects.filter(key="lisenziya", parent=lisenziya).exists():
+    Module.objects.filter(key="istehsal", parent=lisenziya).update(key="lisenziya")
 Module.objects.update_or_create(
-    key="istehsal", parent=lisenziya,
+    key="lisenziya", parent=lisenziya,
     defaults={"title": "Lisenziya", "meta": "Müddətsiz", "icon": "gavel", "order": 1},
 )
 Module.objects.get_or_create(

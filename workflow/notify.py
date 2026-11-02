@@ -14,9 +14,9 @@ from workflow.models import DocumentWorkflowConfig, Notification
 DOC_TYPE_LIST_ROUTE = {
     "ixrac": "/modullar/lisenziya-senedler/idxal-ixrac",
     "idxal": "/modullar/lisenziya-senedler/idxal-ixrac",
-    "istehsal": "/modullar/lisenziya-senedler/istehsal",
-    "xususi_lisenziya": "/modullar/lisenziya-senedler/istehsal",
-    "umumi_lisenziya": "/modullar/lisenziya-senedler/istehsal",
+    "istehsal": "/modullar/lisenziya-senedler/lisenziya",
+    "xususi_lisenziya": "/modullar/lisenziya-senedler/lisenziya",
+    "umumi_lisenziya": "/modullar/lisenziya-senedler/lisenziya",
     "xususi_satis": "/modullar/lisenziya-senedler/xususi-satis",
     "gomrukden_azadolma": "/modullar/lisenziya-senedler/edv-guzesti",
     "edvden_azadolma": "/modullar/lisenziya-senedler/edv-guzesti",

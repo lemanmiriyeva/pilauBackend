@@ -114,6 +114,8 @@ class OrganizationTableSerializer(serializers.ModelSerializer):
             "full_name",
             "code",
             "voen",
+            "director_name",
+            "address",
             "is_active",
             "authorized_person_count",
             "user_count",
@@ -149,7 +151,8 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = [
-            "id", "code", "full_name", "voen", "state_reg_number",
+            "id", "code", "full_name", "voen", "state_reg_number", "director_name",
+            "director_phone", "director_email",
             "email", "phone", "address",
             "parent", "notes", "authorized_persons", "departments", "is_active",
             "created_at", "updated_at",

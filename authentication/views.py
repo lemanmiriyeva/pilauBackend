@@ -475,16 +475,26 @@ class CreateUserView(APIView):
     'İcazə veriləcək modullar' + 'Status' (Baxış/Redaktə/Təsdiq) seçimləri varsa,
     UserModulePermission qeydləri də bu zaman yaradılır.
     """
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrOrgAdmin]
 
     def post(self, request):
-        from permissions_module.models import Module, UserModulePermission
+        from permissions_module.models import Module, UserModulePermission, filter_grantable_modules
 
-        serializer = CreateUserSerializer(data=request.data)
+        payload = request.data
+        if not is_full_admin(request.user):
+            # Qurum admini yalnız ÖZ təşkilatına işçi əlavə edə bilər, rol bayraqlarını verə bilməz.
+            if not request.user.organization_id:
+                return Response({"detail": "Təşkilatınız yoxdur."}, status=403)
+            payload = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+            payload["organization"] = request.user.organization_id
+            for k in ("is_org_admin", "rehber_kadr", "approver_doc_types"):
+                payload.pop(k, None)
+
+        serializer = CreateUserSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
 
-        modules_data = data.pop("modules", []) or []
+        modules_data = filter_grantable_modules(request.user, data.pop("modules", []) or [])
         approver_doc_types = data.pop("approver_doc_types", []) or []
         password = data.pop("password", "") or DEFAULT_INITIAL_PASSWORD
 
@@ -613,6 +623,12 @@ class UserAdminDetailView(generics.RetrieveUpdateAPIView):
             "modules",
             None
         )
+
+        if not is_full_admin(self.request.user):
+            approver_doc_types = None
+            if modules_data is not None:
+                from permissions_module.models import filter_grantable_modules
+                modules_data = filter_grantable_modules(self.request.user, modules_data)
 
         user = serializer.save()
 

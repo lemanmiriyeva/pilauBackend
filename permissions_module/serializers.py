@@ -17,7 +17,7 @@ class UserModulePermissionSerializer(serializers.ModelSerializer):
         model = UserModulePermission
         fields = [
             "id", "user", "user_full_name", "module", "module_title",
-            "can_view", "can_create", "can_edit", "can_approve",
+            "can_view", "can_create", "can_edit", "can_approve", "can_delete",
             "granted_by", "granted_at", "updated_at",
         ]
         read_only_fields = ["granted_by", "granted_at", "updated_at"]
