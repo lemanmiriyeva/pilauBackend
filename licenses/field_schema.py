@@ -47,6 +47,8 @@ STATUS_CHOICES = (
     ("bitmis", "Bitmiş"),
     ("legv", "Ləğv edilib"),
     ("dayandirilib", "Dayandırılıb"),
+    ("qaralama", "Natamam (qaralama)"),
+    ("yoxlamada", "Operator yoxlamasında"),
 )
 
 SUBMISSION_MODES = (
@@ -54,11 +56,6 @@ SUBMISSION_MODES = (
     ("form", "Elektron müraciət forması"),
 )
 
-# --- "Lisenziya" (Xüsusi/Ümumi) - istinad maddəsindəki bəndlər (checkbox siyahısı) ---
-# "İcazələr haqqında" Qanunun lisenziyaya aid maddəsinin bəndləri. İstifadəçi bunları
-# formda/Word şablonunda checkbox kimi işarələyir. Hüquqi mətn dəyişərsə və ya bənd
-# sayı artarsa, YALNIZ bu siyahını yeniləmək kifayətdir (key unikal olmalıdır) -
-# kateqoriya hesablaması (bax compute_lisenziya_kateqoriya) avtomatik uyğunlaşır.
 _BEND_SUB_ITEMS = [
     ("1", "layihələndirilməsi"),
     ("2", "istehsalı və sınaqdan keçirilməsi"),
@@ -73,8 +70,6 @@ _BEND_SURSAT_SUB_ITEMS = [
     ("4", "saxlanılması"),
     ("5", "utilizasiyası"),
 ]
-# Qrup başlıqlarında və bəndlərdə nömrə yoxdur (6., 7., 6.1. ... silindi). "Döyüş təyinatlı
-# hərbi texnikanın və hərbi silahın" ayrıca "Hərbi texnikanın" və "Hərbi silahın" qruplarına bölünüb.
 ISTINAD_MADDESI_BENDLERI = (
     [{"key": f"bend_texnika_{n}", "group": "texnika", "group_label": "Hərbi texnikanın:", "label": lbl}
      for n, lbl in _BEND_SUB_ITEMS]
@@ -91,14 +86,6 @@ LISENZIYA_KATEQORIYA_LABELS = {
 
 
 def compute_lisenziya_kateqoriya(selected_bend_keys) -> str:
-    """İstinad maddəsində (texnika / silah / sursat yarım-bəndləri) işarələnmiş
-    seçimlərə görə lisenziyanın kateqoriyasını ('umumi_lisenziya' /
-    'xususi_lisenziya') təyin edir. İstifadəçi bunu seçmir - sistem avtomatik
-    hesablayır (bax PermitDocument.save, licenses/models.py):
-
-      - Bütün 15 yarım-bənd işarələnibsə (tətbiq sahəsi məhdudlaşdırılmayıb) -> Ümumi Lisenziya
-      - Yarım-bəndlərdən heç olmasa biri işarələnməyibsə (məhdudlaşdırılıb)  -> Xüsusi Lisenziya
-    """
     all_keys = {b["key"] for b in ISTINAD_MADDESI_BENDLERI}
     selected = {k for k in (selected_bend_keys or [])}
     if all_keys and all_keys.issubset(selected):

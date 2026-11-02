@@ -107,7 +107,17 @@ class PermitDocument(models.Model):
     )
     rejected_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField("Rədd səbəbi", blank=True)
-
+    submitted_at = models.DateTimeField("Yoxlamaya göndərilmə vaxtı", null=True, blank=True)
+    operator_decision = models.CharField(
+        "Operator qərarı", max_length=10, blank=True,
+        choices=(("ugurlu", "Uğurlu"), ("imtina", "İmtina")),
+    )
+    operator_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="operator_reviewed_documents",
+    )
+    operator_reviewed_at = models.DateTimeField(null=True, blank=True)
+    operator_comment = models.TextField("Operator qeydi / imtina səbəbi", blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="permit_documents",

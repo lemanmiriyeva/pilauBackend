@@ -35,7 +35,7 @@ class PermitDocumentListSerializer(serializers.ModelSerializer):
     def get_certificate_id(self, obj):
         certificate = getattr(obj, "certificate", None)
         return certificate.id if certificate else None
-    
+
 
 class PermitDocumentDetailSerializer(serializers.ModelSerializer):
     """Image 3/4 - 'Bax' düyməsi ilə açılan detal görünüşü."""
@@ -49,6 +49,10 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
     )
     rejected_by_name = serializers.CharField(source="rejected_by.get_full_name", read_only=True, default="")
     certificate_id = serializers.SerializerMethodField()
+    operator_reviewed_by_name = serializers.CharField(
+        source="operator_reviewed_by.get_full_name", read_only=True, default=""
+    )
+    missing_files = serializers.SerializerMethodField()
 
     class Meta:
         model = PermitDocument
@@ -62,7 +66,8 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
             "stage1_approved_by_name", "stage1_approved_at", "stage1_comment",
             "stage2_approved_by_name", "stage2_approved_at", "stage2_comment",
             "rejected_by_name", "rejected_at", "rejection_reason",
-            "certificate_id",
+            "certificate_id",            "missing_files", "submitted_at",
+            "operator_decision", "operator_reviewed_by_name", "operator_reviewed_at", "operator_comment",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "number", "created_at", "updated_at"]
@@ -72,6 +77,11 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
         # OneToOne olaraq artıq mövcuddur - "Sənədə bax" düyməsi üçün frontend-ə ötürülür.
         certificate = getattr(obj, "certificate", None)
         return certificate.id if certificate else None
+    def get_missing_files(self, obj):
+        if obj.status != "qaralama":
+            return []
+        from licenses.submission import missing_required_files
+        return missing_required_files(obj)
 
 
 class PermitDocumentCreateSerializer(serializers.ModelSerializer):

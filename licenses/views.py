@@ -34,6 +34,13 @@ from workflow.notify import (
     notify_stage1_reviewers,
     notify_stage2_reviewer,
 )
+from licenses.submission import missing_required_files, submit_if_complete
+from workflow.operators import is_main_admin, is_operator, review_document
+
+
+
+
+
 
 FILE_FIELD_PREFIX = "file__"
 
@@ -370,6 +377,10 @@ class ReviewSummaryView(APIView):
             or ApproverPermission.objects.filter(user=user, can_approve=True).exists()
             or _user_is_any_approver(user)
         )
+        can_operator_review = is_main_admin(user) or is_operator(user)
+        operator_pending = (
+            PermitDocument.objects.filter(status="yoxlamada").count() if can_operator_review else 0
+        )
         counts = {1: 0, 2: 0}
         if is_reviewer:
             qs = PermitDocument.objects.filter(status="gozleyir")
@@ -384,7 +395,7 @@ class ReviewSummaryView(APIView):
                 ):
                     counts[doc.approval_stage] += 1
         return Response({"is_reviewer": is_reviewer, "stage1": counts[1], "stage2": counts[2],
-                         "total": counts[1] + counts[2]})
+                         "total": counts[1] + counts[2], "is_operator": can_operator_review, "operator_pending": operator_pending})
 
 
 class PermitDocumentViewSet(viewsets.ModelViewSet):
@@ -410,6 +421,11 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
         # 2. Approver -> bütün təşkilatların sənədlərini görür
         elif _user_is_any_approver(user):
             pass
+
+        elif is_operator(user):
+            qs = qs.filter(
+                models.Q(status="yoxlamada") | models.Q(operator_reviewed_by=user) | models.Q(created_by=user)
+            )
 
         # 3. Qurum admini VƏ adi işçi -> öz təşkilatına (VƏ alt-təşkilatlarına) məxsus bütün
         # sənədləri görür - bura onların öz yaratdıqları sənədlər də daxildir, çünki öz
@@ -525,32 +541,11 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        is_confidential = str(request.data.get("is_confidential", "")).lower() in ("true", "1", "yes")
         schema = get_schema(doc_type)
         labels_by_key = {f["key"]: f["label"] for f in schema["file_fields"]}
 
-        if not is_confidential:
-            missing_files = [
-                f["label"] for f in schema["file_fields"]
-                if f.get("required") and f"{FILE_FIELD_PREFIX}{f['key']}" not in request.FILES
-            ]
-            if missing_files:
-                return Response(
-                    {"detail": f"Bu sənədlər tələb olunur: {', '.join(missing_files)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        document = serializer.save()
-
-        if document.status == "gozleyir":
-            notify_stage1_reviewers(document)
-        elif document.status == "aktiv":
-            # Bu kateqoriyada mərhələli təsdiq söndürülüb - sənəd yaradılan kimi aktiv olur,
-            # ona görə sertifikat da elə burada (təsdiq addımı olmadığı üçün) yaradılır.
-            certificate, _ = LicenseCertificate.objects.get_or_create(
-                permit_document=document, defaults={"form_data": document.form_data}
-            )
-            notify_certificate_ready(document, certificate)
+        # Məcburi sənədlər bloklayıcı deyil: əvvəl 'qaralama', tamdırsa submit_if_complete göndərir.
+        document = serializer.save(status="qaralama")
 
         for key, uploaded_file in request.FILES.items():
             if not key.startswith(FILE_FIELD_PREFIX):
@@ -562,8 +557,56 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
                 file=uploaded_file, original_name=uploaded_file.name,
             )
 
+        submit_if_complete(document)
+        document.refresh_from_db()
+
         out = PermitDocumentDetailSerializer(document, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="upload-files")
+    def upload_files(self, request, pk=None):
+        document = self.get_object()
+        user = request.user
+        if document.status != "qaralama":
+            return Response({"detail": "Fayl yalnız natamam (qaralama) sənədə əlavə oluna bilər."}, status=400)
+        if not (document.created_by_id == user.id or user.is_staff or user.is_superuser
+                or getattr(user, "is_org_admin", False)):
+            return Response({"detail": "Bu sənədə fayl əlavə etmək üçün icazəniz yoxdur."}, status=403)
+
+        labels_by_key = {f["key"]: f["label"] for f in get_schema(document.doc_type)["file_fields"]}
+        saved = 0
+        for key, uploaded_file in request.FILES.items():
+            if not key.startswith(FILE_FIELD_PREFIX):
+                continue
+            field_key = key[len(FILE_FIELD_PREFIX):]
+            if field_key not in labels_by_key:
+                continue
+            document.files.filter(field_key=field_key).delete()
+            PermitDocumentFile.objects.create(
+                document=document, field_key=field_key, field_label=labels_by_key[field_key],
+                file=uploaded_file, original_name=uploaded_file.name,
+            )
+            saved += 1
+        if not saved:
+            return Response({"detail": "Heç bir fayl seçilməyib."}, status=400)
+
+        submitted = submit_if_complete(document)
+        document.refresh_from_db()
+        data = dict(PermitDocumentDetailSerializer(document, context={"request": request}).data)
+        data["submitted"] = submitted
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path="operator-review")
+    def operator_review(self, request, pk=None):
+        document = self.get_object()
+        review_document(
+            document.pk, request.user,
+            (request.data.get("decision") or "").strip(),
+            request.data.get("comment") or "",
+        )
+        document.refresh_from_db()
+        out = PermitDocumentDetailSerializer(document, context={"request": request})
+        return Response(out.data)
 
 class LicenseStatsOverviewView(APIView):
     """Hesabatlar -> Statistik məlumatlar səhifəsi üçün.

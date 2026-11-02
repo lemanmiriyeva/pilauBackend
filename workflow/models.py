@@ -289,3 +289,46 @@ class OrganizationStage1Approver(models.Model):
             f"{self.workflow_config.get_doc_type_display()} · "
             f"{self.organization}"
         )
+class OperatorSettings(models.Model):
+    max_per_round = models.PositiveIntegerField("Dövr üzrə maksimum yoxlama sayı", default=5)
+    round_number = models.PositiveIntegerField("Cari dövr", default=1)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Operator tənzimləməsi"
+        verbose_name_plural = "Operator tənzimləməsi"
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class MsnOperator(models.Model):
+    DISABLED_LIMIT = "limit"
+    DISABLED_MANUAL = "manual"
+    DISABLED_REASON_CHOICES = (
+        (DISABLED_LIMIT, "Dövr limitinə çatıb"),
+        (DISABLED_MANUAL, "Baş admin söndürüb"),
+    )
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="msn_operator")
+    is_active = models.BooleanField("Operator kimi aktivdir", default=True)
+    is_enabled = models.BooleanField("Hazırda yoxlama apara bilər", default=True)
+    disabled_reason = models.CharField(max_length=10, blank=True, choices=DISABLED_REASON_CHOICES)
+    round_count = models.PositiveIntegerField("Cari dövrdə yoxladığı sənəd sayı", default=0)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "MSN operatoru"
+        verbose_name_plural = "MSN operatorları"
+        ordering = ["user__first_name", "user__last_name"]
+
+    def __str__(self):
+        return f"Operator: {self.user}"
