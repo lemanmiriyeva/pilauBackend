@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import assets_views, org_settings_views, profile_views, views
+from . import assets_views, org_settings_views, profile_views, views,turnover_views
 
 urlpatterns = [
     path(
@@ -148,4 +148,7 @@ urlpatterns = [
         views.OrganizationVoenLookupView.as_view(),
         name="organization_voen_lookup"
     ),
+    path("turnovers/", turnover_views.TurnoverListCreateView.as_view(), name="turnovers"),
+    path("turnovers/<int:pk>/", turnover_views.TurnoverDetailView.as_view(), name="turnover_detail"),
+    path("<int:pk>/turnover/", turnover_views.OrganizationTurnoverView.as_view(), name="organization_turnover"),
 ]

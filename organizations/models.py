@@ -226,3 +226,33 @@ class FixedAsset(models.Model):
 
     def __str__(self):
         return f"{self.name} [{self.inventory_code}]"
+
+
+class OrganizationTurnover(models.Model):
+    SCOPE_CHOICES = (("xarici", "Xarici"), ("yerli", "Yerli"))
+    DIRECTION_CHOICES = (("idxal", "İdxal"), ("ixrac", "İxrac"))
+    CURRENCY_CHOICES = (("AZN", "AZN"), ("USD", "USD"), ("EUR", "EUR"))
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="turnovers", verbose_name="Təşkilat",
+    )
+    scope = models.CharField("Təyinat", max_length=10, choices=SCOPE_CHOICES)
+    direction = models.CharField("Növ", max_length=10, choices=DIRECTION_CHOICES)
+    date = models.DateField("Tarix")
+    document_number = models.CharField("Sənəd №", max_length=100, blank=True)
+    product = models.CharField("Nə (məhsul)", max_length=255)
+    quantity = models.DecimalField("Miqdar", max_digits=16, decimal_places=3)
+    unit = models.CharField("Ölçü vahidi", max_length=30, blank=True)
+    amount = models.DecimalField("Məbləğ", max_digits=16, decimal_places=2, null=True, blank=True)
+    currency = models.CharField("Valyuta", max_length=3, choices=CURRENCY_CHOICES, default="AZN")
+    note = models.TextField("Qeyd", blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Təşkilat dövriyyəsi"
+        verbose_name_plural = "Təşkilat dövriyyələri"
+        ordering = ["-date", "-id"]
+        indexes = [models.Index(fields=["scope", "direction", "date"])]
