@@ -9,9 +9,9 @@ from authentication.constants import DEFAULT_INITIAL_PASSWORD
 from authentication.models import User
 from workflow.models import MsnOperator, OperatorSettings
 from workflow.operators import (
-    _annotated_operators, _operator_row, build_operators_payload, can_edit_operators,
-    can_view_operator_queue, can_view_operators_page, create_operator, my_operator_status,
-    recompute_limits, set_operator_enabled,
+    _annotated_operators, _operator_row, assign_operator, build_operators_payload, can_edit_operators,
+    can_view_operator_queue, can_view_operators_page, create_operator, msn_operator_candidates,
+    my_operator_status, recompute_limits, set_operator_enabled,
 )
 
 
@@ -48,14 +48,43 @@ class OperatorListCreateView(APIView):
     def post(self, request):
         if not can_edit_operators(request.user):
             raise PermissionDenied("Operator yaratmaq yalnız Baş admin üçün mümkündür.")
-        serializer = OperatorCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        operator = create_operator(serializer.validated_data, request.user)
+        user_id = request.data.get("user_id")
+        if user_id:
+            # Mövcud MSN istifadəçisini operator təyin et (şifrəsi dəyişmir)
+            operator = assign_operator(user_id, request.user)
+            initial_password = None
+        else:
+            serializer = OperatorCreateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            operator = create_operator(serializer.validated_data, request.user)
+            initial_password = DEFAULT_INITIAL_PASSWORD
         recompute_limits()
         cfg = OperatorSettings.get()
         row = _operator_row(next(op for op in _annotated_operators(timezone.localdate()) if op.id == operator.id), cfg)
-        row["initial_password"] = DEFAULT_INITIAL_PASSWORD
+        if initial_password:
+            row["initial_password"] = initial_password
         return Response(row, status=status.HTTP_201_CREATED)
+
+
+class OperatorCandidatesView(APIView):
+    """GET /api/workflow/operators/candidates/ - operator təyin oluna biləcək MSN istifadəçiləri (YALNIZ Baş admin)."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not can_edit_operators(request.user):
+            raise PermissionDenied("Operator təyin etmək yalnız Baş admin üçün mümkündür.")
+        return Response([
+            {
+                "id": u.id,
+                "full_name": f"{u.first_name} {u.last_name}".strip() or u.username,
+                "username": u.username,
+                "email": u.email,
+                "phone": u.phone,
+                "department_name": u.department.name if u.department_id else "",
+                "position_name": u.position.name if u.position_id else "",
+            }
+            for u in msn_operator_candidates()
+        ])
 
 
 class OperatorDetailView(APIView):

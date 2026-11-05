@@ -223,6 +223,41 @@ def create_operator(data: dict, created_by) -> MsnOperator:
     return MsnOperator.objects.create(user=user, created_by=created_by)
 
 
+def msn_operator_candidates():
+    """Operator təyin oluna biləcək MSN istifadəçiləri: MSN təşkilatının aktiv işçiləri
+    (Baş admin xaric), hazırda aktiv operator olmayanlar."""
+    taken = MsnOperator.objects.filter(is_active=True).values_list("user_id", flat=True)
+    return (
+        User.objects.filter(is_active=True, is_superuser=False, organization__code=Organization.CODE_MSN)
+        .exclude(id__in=list(taken))
+        .select_related("department", "position")
+        .order_by("first_name", "last_name", "username")
+    )
+
+
+@transaction.atomic
+def assign_operator(user_id, created_by) -> MsnOperator:
+    """Mövcud MSN istifadəçisini operator təyin edir (əvvəl operatorluqdan çıxarılıbsa - yenidən aktivləşdirir)."""
+    user = msn_operator_candidates().filter(pk=user_id).first()
+    if user is None:
+        existing = MsnOperator.objects.filter(user_id=user_id, is_active=True).exists()
+        raise ValidationError({"detail": (
+            "Bu istifadəçi artıq operatordur." if existing
+            else "Seçilmiş istifadəçi MSN-in aktiv işçisi deyil və ya Baş admindir."
+        )})
+    operator = MsnOperator.objects.filter(user=user).first()
+    if operator is None:
+        return MsnOperator.objects.create(user=user, created_by=created_by)
+    operator.is_active = True
+    operator.is_enabled = True
+    operator.disabled_reason = ""
+    operator.manual_override = False
+    operator.round_count = 0
+    operator.created_by = created_by
+    operator.save()
+    return operator
+
+
 # ----------------------------------------------------------------------------
 # Statistika
 # ----------------------------------------------------------------------------

@@ -320,6 +320,11 @@ class MsnOperator(models.Model):
     is_enabled = models.BooleanField("Hazırda yoxlama apara bilər", default=True)
     disabled_reason = models.CharField(max_length=10, blank=True, choices=DISABLED_REASON_CHOICES)
     round_count = models.PositiveIntegerField("Cari dövrdə yoxladığı sənəd sayı", default=0)
+    manual_override = models.BooleanField(
+        "Baş admin açıb (limitdən azaddır)", default=False,
+        help_text="Baş admin operatoru əl ilə açanda True olur: operator limitə görə söndürülmür, "
+                  "Baş admin özü söndürənə qədər açıq qalır.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
     )
