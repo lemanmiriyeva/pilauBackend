@@ -110,6 +110,7 @@ class OrganizationProfileView(APIView):
             "permit_count": docs.filter(doc_type__in=PERMIT_DOC_TYPES).count(),
             "activity_document_count": org.activity_documents.count(),
             "nomenclature_count": org.nomenclatures.count(),
+            "partner_count": org.partner_companies.count(),
             "subordinate_count": org.subordinates.count(),
             "equipment_count": org.fixed_assets.count(),
             "can_create": can_org_action(request.user, org, "create"),

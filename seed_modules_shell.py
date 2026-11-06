@@ -31,6 +31,16 @@ teskilatlar, _ = Module.objects.get_or_create(
     },
 )
 
+Module.objects.get_or_create(
+    key="partnyor-sirketler", parent=None,
+    defaults={
+        "title": "Partnyor şirkətlər",
+        "description": "Partnyor şirkətlərin qeydiyyatı və təşkilatlarla əlaqələndirilməsi.",
+        "icon": "apartment",
+        "order": 5,
+    },
+)
+
 inzibatci, _ = Module.objects.get_or_create(
     key="inzibatci-paneli", parent=None,
     defaults={

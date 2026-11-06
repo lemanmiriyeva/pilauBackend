@@ -291,3 +291,27 @@ class OrganizationTurnover(models.Model):
         verbose_name_plural = "Təşkilat dövriyyələri"
         ordering = ["-date", "-id"]
         indexes = [models.Index(fields=["scope", "direction", "date"])]
+
+class PartnerCompany(models.Model):
+    """Partnyor şirkət. Many-to-many: bir təşkilatın bir neçə partnyor şirkəti ola bilər,
+    bir partnyor şirkət də bir neçə təşkilatla işləyə bilər."""
+    name = models.CharField("Şirkətin adı", max_length=255)
+    voen = models.CharField("VÖEN / qeydiyyat nömrəsi", max_length=30, blank=True)
+    country = models.CharField("Ölkə", max_length=100, blank=True)
+    address = models.CharField("Ünvan", max_length=255, blank=True)
+    contact_person = models.CharField("Əlaqə şəxsi", max_length=150, blank=True)
+    phone = models.CharField("Telefon", max_length=50, blank=True)
+    email = models.EmailField("E-poçt", blank=True)
+    note = models.TextField("Qeyd", blank=True)
+    is_active = models.BooleanField("Aktivdir", default=True)
+    organizations = models.ManyToManyField(Organization, related_name="partner_companies", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Partnyor şirkət"
+        verbose_name_plural = "Partnyor şirkətlər"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name

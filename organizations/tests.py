@@ -73,3 +73,33 @@ class NomenclatureAuditTests(NomenclatureApiTests):
         upd = AuditLog.objects.get(action="NOMENCLATURE_UPDATED")
         self.assertIn("qeyd", upd.detail)
         self.assertEqual(upd.user, self.admin)
+
+
+class PartnerApiTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user("adm", "a@x.az", "pw", is_staff=True)
+        self.org1 = Organization.objects.create(full_name="Org 1", voen="1000000001")
+        self.org2 = Organization.objects.create(full_name="Org 2", voen="1000000002")
+        self.user1 = User.objects.create_user("u1", "u1@x.az", "pw", organization=self.org1)
+        self.base = "/api/organizations/"
+
+    def test_many_to_many_scoping_and_audit(self):
+        from audit.models import AuditLog
+        self.client.force_authenticate(self.admin)
+        a = self.client.post(self.base + "partners/", {"name": "ACME", "organization_ids": [self.org1.id, self.org2.id]},
+                             format="json")
+        self.assertEqual(a.status_code, 201, a.content)
+        self.client.post(self.base + "partners/", {"name": "Solo", "organization_ids": [self.org2.id]}, format="json")
+        self.client.force_authenticate(self.user1)
+        self.assertEqual([p["name"] for p in self.client.get(f"{self.base}{self.org1.id}/partners/").json()], ["ACME"])
+        self.assertEqual(self.client.post(self.base + "partners/", {"name": "X"}, format="json").status_code, 403)
+        self.client.force_authenticate(self.admin)
+        pid = a.json()["id"]
+        self.client.delete(f"{self.base}{self.org1.id}/partners/{pid}/")
+        self.assertEqual(self.org1.partner_companies.count(), 0)
+        self.client.post(f"{self.base}{self.org1.id}/partners/", {"partner_ids": [pid]}, format="json")
+        self.assertEqual(self.org1.partner_companies.count(), 1)
+        self.client.patch(f"{self.base}partners/{pid}/", {"phone": "123"}, format="json")
+        actions = set(AuditLog.objects.values_list("action", flat=True))
+        for x in ("PARTNER_CREATED", "PARTNER_UPDATED", "PARTNER_ASSIGNED", "PARTNER_UNASSIGNED"):
+            self.assertIn(x, actions)

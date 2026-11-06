@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import assets_views, nomenclature_views, org_settings_views, profile_views, views,turnover_views
+from . import assets_views, nomenclature_views, partner_views, org_settings_views, profile_views, views,turnover_views
 
 urlpatterns = [
     path(
@@ -110,6 +110,11 @@ urlpatterns = [
     path("<int:pk>/nomenclature/<int:nomenclature_id>/",
          nomenclature_views.OrganizationNomenclatureUnassignView.as_view(),
          name="organization_nomenclature_unassign"),
+    path("<int:pk>/partners/", partner_views.OrganizationPartnerView.as_view(), name="organization_partners"),
+    path("<int:pk>/partners/<int:partner_id>/", partner_views.OrganizationPartnerUnassignView.as_view(),
+         name="organization_partner_unassign"),
+    path("partners/", partner_views.PartnerListCreateView.as_view(), name="partner_list"),
+    path("partners/<int:pk>/", partner_views.PartnerDetailView.as_view(), name="partner_detail"),
     path("nomenclatures/", nomenclature_views.NomenclatureListCreateView.as_view(), name="nomenclature_list"),
     path("nomenclatures/<int:pk>/", nomenclature_views.NomenclatureDetailView.as_view(), name="nomenclature_detail"),
     path("nomenclature-catalog/categories/", nomenclature_views.CatalogView.as_view(kind="categories")),
