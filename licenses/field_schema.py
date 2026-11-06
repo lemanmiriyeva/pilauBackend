@@ -289,6 +289,8 @@ _LISENZIYA_FILE_FIELDS = [
      "max_size_mb": 10},
     {"key": "vesiqe_sureti", "label": "Səlahiyyətli şəxsin şəxsiyyət vəsiqəsinin surəti", "required": True,
      "max_size_mb": 10},
+    {"key": "dovlet_rusumu", "label": "Dövlət rüsumunun ödənildiyini təsdiqləyən sənəd", "required": True,
+     "max_size_mb": 10},
 ]
 
 _LISENZIYA_FORM_FIELDS = [
