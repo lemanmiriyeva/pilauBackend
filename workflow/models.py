@@ -19,7 +19,7 @@ bu fayla daxil deyil (bax layihə qeydlərində "təsdiqdən sonrakı məsələl
 from django.conf import settings
 from django.db import models
 
-from licenses.field_schema import DOC_TYPES
+from licenses.field_schema import DOC_TYPES, config_doc_type
 
 
 class OrgReviewerPermission(models.Model):
@@ -70,7 +70,7 @@ class OrgReviewerPermission(models.Model):
         )
         reviewer_ids = set(
             cls.objects.filter(
-                organization_id=organization_id, doc_type=doc_type, can_review=True,
+                organization_id=organization_id, doc_type=config_doc_type(doc_type), can_review=True,
             ).values_list("user_id", flat=True)
         )
         return org_admin_ids | reviewer_ids
@@ -218,7 +218,7 @@ class OrgStage2Setting(models.Model):
         if not organization_id:
             return False
         return cls.objects.filter(
-            organization_id=organization_id, doc_type=doc_type, skip_stage2=True,
+            organization_id=organization_id, doc_type=config_doc_type(doc_type), skip_stage2=True,
         ).exists()
 
 

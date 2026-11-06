@@ -16,7 +16,9 @@ from organizations.models import AuthorizedPerson
 from organizations.permissions import scoped_organization_ids
 
 from licenses.certificate_pdf import build_certificate_pdf
-from licenses.field_schema import DOC_TYPES, get_schema
+from licenses.field_schema import (
+    APPROVAL_FLOW_DOC_TYPES, APPROVAL_LISENZIYA_TYPES, DOC_TYPES, config_doc_type, get_schema,
+)
 from licenses.anket_docx import build_anket_template, parse_anket_template
 from licenses.models import ApprovalSettings, LicenseCertificate, PermitDocument, PermitDocumentFile
 from licenses.serializers import (
@@ -81,7 +83,13 @@ def _can_create_doc_type(user, doc_type: str) -> bool:
 
 
 def _workflow_configs():
-    return {c.doc_type: c for c in DocumentWorkflowConfig.objects.all()}
+    configs = {c.doc_type: c for c in DocumentWorkflowConfig.objects.all()}
+    # "istehsal"/"umumi_lisenziya" sənədləri də vahid "Lisenziya" konfiqurasiyasını istifadə edir.
+    main = configs.get(config_doc_type("xususi_lisenziya"))
+    if main:
+        for dt in APPROVAL_LISENZIYA_TYPES:
+            configs[dt] = main
+    return configs
 
 
 def _user_can_approve_document(user, document, config=None) -> bool:
@@ -95,12 +103,12 @@ def _user_can_approve_document(user, document, config=None) -> bool:
     if user.is_superuser:
         return True
     if config is None:
-        config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+        config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
 
     if document.approval_stage == 1:
         if config and config.stage1_mode == "msn":
             return bool(config.stage1_user_id) and config.stage1_user_id == user.id
-        return user.id in OrgReviewerPermission.eligible_user_ids(document.organization_id, document.doc_type)
+        return user.id in OrgReviewerPermission.eligible_user_ids(document.organization_id, config_doc_type(document.doc_type))
 
     return bool(config) and config.stage2_user_id == user.id
 
@@ -307,7 +315,7 @@ class ApprovalSettingsView(APIView):
         current = ApprovalSettings.all_as_dict()
         return Response([
             {"doc_type": dt, "label": label, "staged_approval_enabled": current[dt]}
-            for dt, label in DOC_TYPES
+            for dt, label in APPROVAL_FLOW_DOC_TYPES
         ])
 
     def patch(self, request):

@@ -18,6 +18,26 @@ DOC_TYPES = (
     ("edvden_azadolma", "ƏDV-dən Azadolma"),
 )
 
+# --- Təsdiq axını üçün vahid "Lisenziya" ---
+# Köhnə "istehsal", "Xüsusi" və "Ümumi" lisenziya təsdiq axınında AYRI kateqoriya deyil: hamısı
+# tək "Lisenziya" sətridir. Konfiqurasiya (mərhələli təsdiq açar/bağlı, təsdiqçilər, 2-ci mərhələ,
+# imzalayan) kanonik "xususi_lisenziya" açarı altında saxlanılır və hər üç növə tətbiq olunur.
+APPROVAL_LISENZIYA_TYPES = ("istehsal", "xususi_lisenziya", "umumi_lisenziya")
+LISENZIYA_CONFIG_KEY = "xususi_lisenziya"
+
+
+def config_doc_type(doc_type: str) -> str:
+    """Konfiqurasiya axtarışı üçün kanonik doc_type (3 lisenziya növü -> 'xususi_lisenziya')."""
+    return LISENZIYA_CONFIG_KEY if doc_type in APPROVAL_LISENZIYA_TYPES else doc_type
+
+
+# Təsdiq axını ekranlarında göstərilən kateqoriyalar: lisenziya TƏK sətir kimi.
+APPROVAL_FLOW_DOC_TYPES = tuple(
+    (key, "Lisenziya" if key == LISENZIYA_CONFIG_KEY else label)
+    for key, label in DOC_TYPES
+    if key not in APPROVAL_LISENZIYA_TYPES or key == LISENZIYA_CONFIG_KEY
+)
+
 # Bax seed_modules_shell.py -> meta ("1 illik ..." / "Müddətsiz"): idxal/ixrac və ƏDV güzəşt
 # (gömrükdən azadolma / ƏDV-dən azadolma) 1 illikdir (təsdiqlənəndə bitmə tarixi avtomatik
 # +1 il qoyulur); lisenziya və xüsusi satış isə müddətsizdir (bitmə tarixi boş qalır).

@@ -3,8 +3,8 @@ from django.db import models
 from django.utils import timezone
 
 from licenses.field_schema import (
-    DOC_TYPES, LISENZIYA_DOC_TYPES, LISENZIYA_KATEQORIYA_LABELS, STATUS_CHOICES,
-    SUBMISSION_MODES, compute_lisenziya_kateqoriya,
+    APPROVAL_LISENZIYA_TYPES, DOC_TYPES, LISENZIYA_DOC_TYPES, LISENZIYA_KATEQORIYA_LABELS, STATUS_CHOICES,
+    SUBMISSION_MODES, compute_lisenziya_kateqoriya, config_doc_type,
 )
 
 
@@ -33,13 +33,16 @@ class ApprovalSettings(models.Model):
 
     @classmethod
     def get_for(cls, doc_type: str) -> "ApprovalSettings":
-        obj, _ = cls.objects.get_or_create(doc_type=doc_type)
+        obj, _ = cls.objects.get_or_create(doc_type=config_doc_type(doc_type))
         return obj
 
     @classmethod
     def all_as_dict(cls) -> dict:
         existing = {row.doc_type: row.staged_approval_enabled for row in cls.objects.all()}
-        return {dt: existing.get(dt, True) for dt, _ in DOC_TYPES}
+        current = {dt: existing.get(dt, True) for dt, _ in DOC_TYPES}
+        for dt in APPROVAL_LISENZIYA_TYPES:  # 3 lisenziya növü eyni tənzimləməni paylaşır
+            current[dt] = current[config_doc_type(dt)]
+        return current
 
 
 def _default_number(doc_type: str) -> str:
@@ -169,7 +172,7 @@ class PermitDocument(models.Model):
             self.stage1_comment = comment
             self.approval_stage = 2
 
-            config = DocumentWorkflowConfig.objects.filter(doc_type=self.doc_type).first()
+            config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(self.doc_type)).first()
             msn_stage2_disabled = bool(config and not config.stage2_enabled)
 
             if msn_stage2_disabled:
@@ -178,7 +181,7 @@ class PermitDocument(models.Model):
                     "2-ci mərhələ Nazirlik admini tərəfindən bu kateqoriya üçün söndürülüb - "
                     "avtomatik keçildi."
                 )
-            elif OrgStage2Setting.is_skipped(self.organization_id, self.doc_type):
+            elif OrgStage2Setting.is_skipped(self.organization_id, config_doc_type(self.doc_type)):
                 self.status = "aktiv"
                 self.stage2_comment = (
                     "2-ci mərhələ təşkilat admini tərəfindən bu kateqoriya üçün söndürülüb - "

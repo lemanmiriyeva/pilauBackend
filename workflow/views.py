@@ -5,7 +5,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from licenses.field_schema import DOC_TYPES
+from licenses.field_schema import APPROVAL_FLOW_DOC_TYPES, DOC_TYPES
 
 from organizations.permissions import (
     IsStaffOrOrgAdmin,
@@ -43,7 +43,7 @@ DOC_TYPES_PAYLOAD = [
         "key": key,
         "label": label,
     }
-    for key, label in DOC_TYPES
+    for key, label in APPROVAL_FLOW_DOC_TYPES
 ]
 
 
@@ -216,7 +216,7 @@ class Stage1PermissionsView(APIView):
     ]
 
     doc_type_keys = [
-        key for key, _ in DOC_TYPES
+        key for key, _ in APPROVAL_FLOW_DOC_TYPES
     ]
 
     def get(self, request):
@@ -401,7 +401,7 @@ class Stage2PermissionsView(APIView):
     ]
 
     doc_type_keys = [
-        key for key, _ in DOC_TYPES
+        key for key, _ in APPROVAL_FLOW_DOC_TYPES
     ]
 
     # ------------------------------------------------------------------------
@@ -1192,7 +1192,7 @@ class WorkflowConfigView(APIView):
 
         rows = []
 
-        for key, label in DOC_TYPES:
+        for key, label in APPROVAL_FLOW_DOC_TYPES:
             config = configs_by_type.get(
                 key
             )

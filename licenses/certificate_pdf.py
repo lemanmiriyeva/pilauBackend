@@ -25,7 +25,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
-from licenses.field_schema import get_schema
+from licenses.field_schema import config_doc_type, get_schema
 
 INK = colors.HexColor("#1A1A1A")
 MUTED = colors.HexColor("#5A5A5A")
@@ -123,7 +123,7 @@ def _signer_info(document, certificate):
     from workflow.models import DocumentWorkflowConfig
 
     user = None
-    config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+    config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
     if config and config.signer_user_id:
         user = config.signer_user
 

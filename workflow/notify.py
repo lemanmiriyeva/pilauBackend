@@ -9,6 +9,7 @@ ona görə e-poçt problemi sənəd yaradılmasını heç vaxt pozmur.
 """
 import threading
 
+from licenses.field_schema import config_doc_type
 from workflow.models import DocumentWorkflowConfig, Notification
 
 DOC_TYPE_LIST_ROUTE = {
@@ -35,7 +36,7 @@ def _stage1_recipients(document):
     from authentication.models import User
     from workflow.models import OrgReviewerPermission
 
-    config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+    config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
     stage1_mode = config.stage1_mode if config else "qurum"
 
     if stage1_mode == "msn" and config and config.stage1_user_id and config.stage1_user.is_active:
@@ -83,7 +84,7 @@ def notify_stage2_reviewer(document) -> None:
     """1-ci mərhələ təsdiqləndikdən dərhal sonra çağırılır (bax
     licenses.views.PermitDocumentViewSet.approve) - sənəd 2-ci mərhələyə keçəndə 2-ci mərhələ
     icraçısına (həmişə MSN, bax DocumentWorkflowConfig.stage2_user) bildiriş göndərir."""
-    config = DocumentWorkflowConfig.objects.filter(doc_type=document.doc_type).first()
+    config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
     if not config or not config.stage2_user_id or not config.stage2_user.is_active:
         return
 
