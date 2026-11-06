@@ -23,4 +23,5 @@ urlpatterns = [
     path("operators/<int:pk>/", operator_views.OperatorDetailView.as_view(), name="operator_detail"),
     path("operator-queue/", operator_views.OperatorQueueView.as_view(), name="operator_queue"),
     path("operators/candidates/", operator_views.OperatorCandidatesView.as_view(), name="operators_candidates"),
+    path("operators/activity/", operator_views.OperatorActivityView.as_view(), name="operators_activity"),
 ]

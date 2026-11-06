@@ -66,6 +66,67 @@ class OperatorListCreateView(APIView):
         return Response(row, status=status.HTTP_201_CREATED)
 
 
+class OperatorActivityView(APIView):
+    """GET /api/workflow/operators/activity/ - operatorların fəaliyyət jurnalı (Baş admin və adi admin üçün baxış).
+    Filterlər: operator=<user id>, object_type, date_from, date_to, q; səhifələmə: limit (maks 500), offset."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Q
+        from audit.models import OperatorActivity
+
+        if not can_view_operators_page(request.user):
+            raise PermissionDenied("Operator jurnalına baxmaq icazəniz yoxdur.")
+        p = request.query_params
+        qs = OperatorActivity.objects.select_related("organization")
+        if p.get("operator"):
+            qs = qs.filter(operator_id=p["operator"])
+        if p.get("object_type"):
+            qs = qs.filter(object_type=p["object_type"])
+        d_from, d_to = parse_date(p.get("date_from") or ""), parse_date(p.get("date_to") or "")
+        if d_from:
+            qs = qs.filter(created_at__date__gte=d_from)
+        if d_to:
+            qs = qs.filter(created_at__date__lte=d_to)
+        q = (p.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(action_label__icontains=q) | Q(object_label__icontains=q)
+                | Q(operator_name__icontains=q) | Q(path__icontains=q)
+            )
+        try:
+            limit = max(1, min(int(p.get("limit", 100)), 500))
+            offset = max(0, int(p.get("offset", 0)))
+        except ValueError:
+            limit, offset = 100, 0
+        total = qs.count()
+        rows = qs[offset:offset + limit]
+        return Response({
+            "total": total,
+            "operators": [
+                {"user_id": op.user_id,
+                 "name": f"{op.user.first_name} {op.user.last_name}".strip() or op.user.username,
+                 "is_active": op.is_active}
+                for op in MsnOperator.objects.select_related("user").order_by("user__first_name", "user__last_name")
+            ],
+            "object_types": [{"key": k, "label": v} for k, v in OperatorActivity.OBJECT_TYPES],
+            "results": [
+                {
+                    "id": a.id, "created_at": a.created_at,
+                    "operator_id": a.operator_id, "operator_name": a.operator_name,
+                    "operator_username": a.operator_username,
+                    "action": a.action, "action_label": a.action_label,
+                    "object_type": a.object_type, "object_id": a.object_id, "object_label": a.object_label,
+                    "organization_id": a.organization_id,
+                    "organization_name": a.organization.full_name if a.organization_id else "",
+                    "method": a.method, "path": a.path, "status_code": a.status_code,
+                    "ip_address": a.ip_address, "detail": a.detail,
+                }
+                for a in rows
+            ],
+        })
+
+
 class OperatorCandidatesView(APIView):
     """GET /api/workflow/operators/candidates/ - operator təyin oluna biləcək MSN istifadəçiləri (YALNIZ Baş admin)."""
     permission_classes = [permissions.IsAuthenticated]

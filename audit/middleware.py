@@ -12,6 +12,17 @@ class RequestAuditMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Operator jurnalı üçün JSON gövdəsini view-dan ƏVVƏL oxuyuruq (Django onu keşləyir, DRF sonra da oxuya bilir).
+        body_bytes = None
+        try:
+            from .operator_log import LOGGED_PREFIXES, MAX_BODY_BYTES, SAFE_METHODS
+            if (request.method not in SAFE_METHODS and request.path.startswith(LOGGED_PREFIXES)
+                    and request.META.get("CONTENT_TYPE", "").startswith("application/json")
+                    and int(request.META.get("CONTENT_LENGTH") or 0) <= MAX_BODY_BYTES):
+                body_bytes = request.body
+        except Exception:
+            body_bytes = None
+
         response = self.get_response(request)
 
         if request.path.startswith(self.SENSITIVE_PREFIXES) and request.method != "GET":
@@ -30,5 +41,12 @@ class RequestAuditMiddleware:
                 )
             except Exception:
                 pass
+
+        # MSN operatorlarının fəaliyyət jurnalı (bax audit/operator_log.py)
+        try:
+            from .operator_log import log_operator_request
+            log_operator_request(request, response, body_bytes)
+        except Exception:
+            pass
 
         return response
