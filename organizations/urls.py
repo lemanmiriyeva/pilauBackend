@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import assets_views, org_settings_views, profile_views, views,turnover_views
+from . import assets_views, nomenclature_views, org_settings_views, profile_views, views,turnover_views
 
 urlpatterns = [
     path(
@@ -105,11 +105,19 @@ urlpatterns = [
     path("<int:pk>/employees/", profile_views.OrganizationEmployeesView.as_view(), name="organization_employees"),
     path("<int:pk>/employees/<int:user_id>/", profile_views.OrganizationEmployeeDetailView.as_view(),
          name="organization_employee_detail"),
-    path("<int:pk>/nomenclature/", profile_views.OrganizationNomenclatureView.as_view(),
+    path("<int:pk>/nomenclature/", nomenclature_views.OrganizationNomenclatureView.as_view(),
          name="organization_nomenclature"),
-
-    path("nomenclature/<int:pk>/", profile_views.OrganizationNomenclatureDetailView.as_view(),
-         name="organization_nomenclature_detail"),
+    path("<int:pk>/nomenclature/<int:nomenclature_id>/",
+         nomenclature_views.OrganizationNomenclatureUnassignView.as_view(),
+         name="organization_nomenclature_unassign"),
+    path("nomenclatures/", nomenclature_views.NomenclatureListCreateView.as_view(), name="nomenclature_list"),
+    path("nomenclatures/<int:pk>/", nomenclature_views.NomenclatureDetailView.as_view(), name="nomenclature_detail"),
+    path("nomenclature-catalog/categories/", nomenclature_views.CatalogView.as_view(kind="categories")),
+    path("nomenclature-catalog/categories/<int:pk>/", nomenclature_views.CatalogDetailView.as_view(kind="categories")),
+    path("nomenclature-catalog/subcategories/", nomenclature_views.CatalogView.as_view(kind="subcategories")),
+    path("nomenclature-catalog/subcategories/<int:pk>/", nomenclature_views.CatalogDetailView.as_view(kind="subcategories")),
+    path("nomenclature-catalog/operation-types/", nomenclature_views.CatalogView.as_view(kind="operation-types")),
+    path("nomenclature-catalog/operation-types/<int:pk>/", nomenclature_views.CatalogDetailView.as_view(kind="operation-types")),
     path("<int:pk>/permit-documents/", profile_views.OrganizationPermitDocumentsView.as_view(),
          name="organization_permit_documents"),
     path("<int:pk>/turnover/", profile_views.OrganizationTurnoverView.as_view(),

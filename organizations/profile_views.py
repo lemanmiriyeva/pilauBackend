@@ -4,8 +4,7 @@ GET   /api/organizations/<id>/profile/                 - ümumi məlumat + say g
 GET   /api/organizations/<id>/employees/               - təşkilatın işçiləri (sistem istifadəçiləri)
 POST  /api/organizations/<id>/employees/               - yeni işçi əlavə et (ilkin şifrə ilə; departament/vəzifə ilə)
 PATCH /api/organizations/<id>/employees/<user_id>/     - işçini redaktə et
-GET/POST /api/organizations/<id>/nomenclature/         - təşkilatın nomenklaturası (məhsul/avadanlıq)
-PATCH/DELETE /api/organizations/nomenclature/<pk>/
+(nomenklatura endpoint-ləri: bax nomenclature_views.py)
 GET   /api/organizations/<id>/permit-documents/?group=license|permit
 GET   /api/organizations/<id>/activity-documents/      - fəaliyyətə dair sənədlər
 POST  /api/organizations/<id>/activity-documents/      - sənəd yüklə (multipart: title, file)
@@ -31,7 +30,7 @@ from rest_framework.views import APIView
 from authentication.constants import DEFAULT_INITIAL_PASSWORD
 from authentication.models import User
 
-from .models import Organization, OrganizationDocument, OrganizationNomenclature
+from .models import Organization, OrganizationDocument
 from .permissions import is_full_admin, is_org_admin, scoped_organization_ids
 
 # Sənəd növlərinin qruplaşdırılması (bax licenses.field_schema.DOC_TYPES)
@@ -110,7 +109,7 @@ class OrganizationProfileView(APIView):
             "license_count": docs.filter(doc_type__in=LICENSE_DOC_TYPES).count(),
             "permit_count": docs.filter(doc_type__in=PERMIT_DOC_TYPES).count(),
             "activity_document_count": org.activity_documents.count(),
-            "nomenclature_count": org.nomenclature_items.count(),
+            "nomenclature_count": org.nomenclatures.count(),
             "subordinate_count": org.subordinates.count(),
             "equipment_count": org.fixed_assets.count(),
             "can_create": can_org_action(request.user, org, "create"),
@@ -389,62 +388,3 @@ class OrganizationActivityDocumentDownloadView(APIView):
         return FileResponse(doc.file.open("rb"), as_attachment=True, filename=doc.file.name.rsplit("/", 1)[-1])
 
 
-# ---------------------------------------------------------------- Nomenklatura
-
-class NomenclatureSerializer(serializers.ModelSerializer):
-    category_label = serializers.CharField(source="get_category_display", read_only=True)
-
-    class Meta:
-        model = OrganizationNomenclature
-        fields = ["id", "name", "code", "category", "category_label", "unit", "note", "created_at"]
-        read_only_fields = ["id", "created_at"]
-
-    def validate_name(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("Ad boş ola bilməz.")
-        return value.strip()
-
-
-class OrganizationNomenclatureView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, pk):
-        org = get_visible_organization(request, pk)
-        items = org.nomenclature_items.all()
-        search = (request.query_params.get("search") or "").strip()
-        if search:
-            from django.db.models import Q
-            items = items.filter(Q(name__icontains=search) | Q(code__icontains=search))
-        return Response(NomenclatureSerializer(items, many=True).data)
-
-    def post(self, request, pk):
-        org = get_visible_organization(request, pk)
-        if not can_org_action(request.user, org, "create"):
-            raise PermissionDenied("Nomenklatura yaratmaq üçün 'Yaratma' icazəniz yoxdur.")
-        serializer = NomenclatureSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(organization=org)
-        return Response(serializer.data, status=201)
-
-
-class OrganizationNomenclatureDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get(self, request, pk, action="edit"):
-        item = get_object_or_404(OrganizationNomenclature, pk=pk)
-        org = get_visible_organization(request, item.organization_id)
-        if not can_org_action(request.user, org, action):
-            label = "Silmə" if action == "delete" else "Redaktə"
-            raise PermissionDenied(f"Bu əməliyyat üçün '{label}' icazəniz yoxdur.")
-        return item
-
-    def patch(self, request, pk):
-        item = self._get(request, pk)
-        serializer = NomenclatureSerializer(item, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request, pk):
-        self._get(request, pk, "delete").delete()
-        return Response(status=204)

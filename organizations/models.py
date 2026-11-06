@@ -159,34 +159,69 @@ class OrganizationDocument(models.Model):
         return f"{self.title} ({self.organization.full_name})"
 
 
-class OrganizationNomenclature(models.Model):
-    """Təşkilata məxsus nomenklatura - təşkilatın istehsal etdiyi/təmir etdiyi/saxladığı
-    məhsul və avadanlıqların siyahısı (ad, kod, kateqoriya, ölçü vahidi)."""
+class NomenclatureCategory(models.Model):
+    """Nomenklatura kateqoriyası (əvvəlcədən yaradılan siyahı - autocomplete üçün)."""
+    name = models.CharField("Kateqoriya", max_length=150, unique=True)
 
-    CATEGORY_CHOICES = [
-        ("herbi_texnika", "Hərbi texnika"),
-        ("herbi_silah", "Hərbi silah"),
-        ("doyus_sursati", "Döyüş sursatı"),
-        ("avadanliq", "Avadanlıq"),
-        ("diger", "Digər"),
-    ]
+    class Meta:
+        verbose_name = "Nomenklatura kateqoriyası"
+        verbose_name_plural = "Nomenklatura kateqoriyaları"
+        ordering = ["name"]
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="nomenclature_items")
-    name = models.CharField("Adı", max_length=255)
-    code = models.CharField("Nomenklatura kodu", max_length=100, blank=True)
-    category = models.CharField("Kateqoriya", max_length=20, choices=CATEGORY_CHOICES, default="avadanliq")
+    def __str__(self):
+        return self.name
+
+
+class NomenclatureSubcategory(models.Model):
+    """Alt kateqoriya - müəyyən kateqoriyaya bağlıdır."""
+    category = models.ForeignKey(NomenclatureCategory, on_delete=models.CASCADE, related_name="subcategories")
+    name = models.CharField("Alt kateqoriya", max_length=150)
+
+    class Meta:
+        verbose_name = "Nomenklatura alt kateqoriyası"
+        verbose_name_plural = "Nomenklatura alt kateqoriyaları"
+        ordering = ["name"]
+        unique_together = [("category", "name")]
+
+    def __str__(self):
+        return f"{self.category.name} / {self.name}"
+
+
+class NomenclatureOperationType(models.Model):
+    """Əməliyyat növü (idxal, ixrac, ƏDV azad olma, satış, istehsal ...). Sonradan əlavə olunabilir."""
+    name = models.CharField("Əməliyyat növü", max_length=100, unique=True)
+
+    class Meta:
+        verbose_name = "Əməliyyat növü"
+        verbose_name_plural = "Əməliyyat növləri"
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name
+
+
+class Nomenclature(models.Model):
+    """Ümumi nomenklatura mövqeyi. Bir nomenklatura bir neçə təşkilata, bir təşkilat da bir neçə
+    nomenklaturaya bağlana bilər (many-to-many); təşkilatlara admin təyin edir."""
+    operation_type = models.ForeignKey(NomenclatureOperationType, on_delete=models.PROTECT, related_name="nomenclatures")
+    category = models.ForeignKey(NomenclatureCategory, on_delete=models.PROTECT, related_name="nomenclatures")
+    subcategory = models.ForeignKey(
+        NomenclatureSubcategory, on_delete=models.PROTECT, related_name="nomenclatures", null=True, blank=True,
+    )
+    name = models.CharField("Məhsulun adı", max_length=255)
     unit = models.CharField("Ölçü vahidi", max_length=30, blank=True)
     note = models.TextField("Qeyd", blank=True)
+    organizations = models.ManyToManyField(Organization, related_name="nomenclatures", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Nomenklatura"
         verbose_name_plural = "Nomenklatura"
-        ordering = ["category", "name"]
+        ordering = ["name"]
 
     def __str__(self):
-        return f"{self.name} ({self.organization.full_name})"
+        return self.name
 
 
 class SubordinateInstitution(models.Model):

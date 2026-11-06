@@ -232,7 +232,8 @@ _ISTEHSAL_FILE_FIELDS = [
 # --- "Elektron müraciət forması" (Lisenziya anketi) - İstehsal lisenziyası (Image 3) ---
 _ISTEHSAL_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
-    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "text", "required": True},
+    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "nomenclature", "required": True,
+     "help_text": "Yalnız seçilmiş təşkilata təyin olunmuş nomenklaturalar göstərilir."},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
      "options": LICENSE_TYPE_CHOICES},
     {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
@@ -272,7 +273,8 @@ _LISENZIYA_FILE_FIELDS = [
 
 _LISENZIYA_FORM_FIELDS = [
     {"key": "lisenziya_nomresi", "label": "Lisenziya nömrəsi", "type": "text", "required": True, "auto": True},
-    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "text", "required": True},
+    {"key": "mehsulun_novu", "label": "Təşkilatın nomenklaturası", "type": "nomenclature", "required": True,
+     "help_text": "Yalnız seçilmiş təşkilata təyin olunmuş nomenklaturalar göstərilir."},
     {"key": "lisenziya_tipi", "label": "Lisenziya tipi", "type": "select", "required": True,
      "options": LICENSE_TYPE_CHOICES},
     {"key": "fealiyyet_sahesi", "label": "Fəaliyyət sahəsi", "type": "select", "required": True,
