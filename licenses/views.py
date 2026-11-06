@@ -411,6 +411,14 @@ class PermitDocumentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     queryset = PermitDocument.objects.select_related("organization", "authorized_person", "certificate").prefetch_related("files")
+
+    def retrieve(self, request, *args, **kwargs):
+        # Təsdiq söndürülüb, amma sənədin rəsmi sənədi yoxdursa (əvvəl yaradılıb) - indi yaradılır.
+        instance = self.get_object()
+        if not hasattr(instance, "certificate"):
+            instance.ensure_certificate_if_unapproved_flow()
+            instance = self.get_queryset().get(pk=instance.pk)
+        return Response(self.get_serializer(instance).data)
     def get_serializer_class(self):
         if self.action == "list":
             return PermitDocumentListSerializer

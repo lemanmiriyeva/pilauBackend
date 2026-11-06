@@ -159,6 +159,16 @@ class PermitDocument(models.Model):
         if creating and self.status == "gozleyir" and not ApprovalSettings.get_for(self.doc_type).staged_approval_enabled:
             self.status = "aktiv"
         super().save(*args, **kwargs)
+        self.ensure_certificate_if_unapproved_flow()
+
+    def ensure_certificate_if_unapproved_flow(self):
+        """Mərhələli təsdiq bu kateqoriyada SÖNÜKDÜRSƏ və sənəd aktivdirsə, rəsmi sənəd (sertifikat)
+        həmişə mövcud olmalıdır - əvvəl yalnız 'göndər' axınında yaranırdı, digər yollarla (köhnə
+        sənədlər, birbaşa aktiv yaradılma) 'Rəsmi sənəd hələ yaradılmayıb' qalırdı."""
+        if self.pk and self.status == "aktiv" \
+                and not ApprovalSettings.get_for(self.doc_type).staged_approval_enabled \
+                and not LicenseCertificate.objects.filter(permit_document_id=self.pk).exists():
+            LicenseCertificate.objects.create(permit_document=self, form_data=self.form_data)
 
     def approve_stage(self, user, comment: str = "") -> "LicenseCertificate | None":
 

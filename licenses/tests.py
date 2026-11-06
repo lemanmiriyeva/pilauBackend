@@ -29,3 +29,20 @@ class UnifiedLisenziyaApprovalTests(APITestCase):
         self.assertEqual(config_doc_type("ixrac"), "ixrac")
         rows = self.client.get("/api/licenses/approval-settings/").json()
         self.assertEqual([x["label"] for x in rows if x["doc_type"].endswith("lisenziya")], ["Lisenziya"])
+
+
+class DisabledApprovalCertificateTests(APITestCase):
+    def test_active_doc_gets_certificate_when_flow_disabled(self):
+        from licenses.models import LicenseCertificate, PermitDocument
+        from organizations.models import Organization
+        ApprovalSettings.get_for("xususi_lisenziya")
+        s = ApprovalSettings.get_for("umumi_lisenziya"); s.staged_approval_enabled = False; s.save()
+        org = Organization.objects.create(full_name="O", voen="1000000009")
+        doc = PermitDocument.objects.create(doc_type="umumi_lisenziya", organization=org, status="aktiv")
+        self.assertTrue(LicenseCertificate.objects.filter(permit_document=doc).exists())
+        LicenseCertificate.objects.all().delete()
+        admin = User.objects.create_user("adm2", "a2@x.az", "pw", is_staff=True)
+        self.client.force_authenticate(admin)
+        r = self.client.get(f"/api/licenses/permit-documents/{doc.pk}/")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.json()["certificate_id"])
