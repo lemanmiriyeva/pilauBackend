@@ -46,3 +46,15 @@ class DisabledApprovalCertificateTests(APITestCase):
         r = self.client.get(f"/api/licenses/permit-documents/{doc.pk}/")
         self.assertEqual(r.status_code, 200, r.content)
         self.assertTrue(r.json()["certificate_id"])
+
+
+class IssueDateTests(APITestCase):
+    def test_issue_date_set_when_active(self):
+        from licenses.models import PermitDocument
+        from organizations.models import Organization
+        org = Organization.objects.create(full_name="O2", voen="1000000010")
+        d = PermitDocument.objects.create(doc_type="xususi_lisenziya", organization=org, status="gozleyir")
+        self.assertIsNone(d.issue_date)
+        d.status = "aktiv"; d.save()
+        d.refresh_from_db()
+        self.assertIsNotNone(d.issue_date)

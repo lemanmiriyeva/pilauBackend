@@ -158,6 +158,12 @@ class PermitDocument(models.Model):
         # yaradılır - bax ApprovalSettings, licenses/views.py PermitDocumentCreateSerializer.
         if creating and self.status == "gozleyir" and not ApprovalSettings.get_for(self.doc_type).staged_approval_enabled:
             self.status = "aktiv"
+        # Sənəd aktiv olan anda (təsdiq söndürülübsə dərhal, əks halda son mərhələdə) verilmə tarixi
+        # boşdursa bu günə təyin olunur.
+        if self.status == "aktiv" and not self.issue_date:
+            self.issue_date = timezone.localdate()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = list(kwargs["update_fields"]) + ["issue_date"]
         super().save(*args, **kwargs)
         self.ensure_certificate_if_unapproved_flow()
 
