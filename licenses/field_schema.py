@@ -50,9 +50,9 @@ LICENSE_TYPE_CHOICES = (
     ("yeniden_resmilesdirme", "Yenidən rəsmiləşdirmə"),
 )
 ACTIVITY_TYPE_CHOICES = (
-    ("herbi_texnika", "Hərbi texnika"),
-    ("doyus_teyinatli", "Döyüş təyinatlı"),
-    ("silah", "Silah"),
+    ("herbi_texnika", "Döyüş təyinatlı hərbi texnika"),
+    ("silah", "Döyüş təyinatlı hərbi silah"),
+    ("doyus_sursati", "Döyüş sursatı"),
 
 )
 SATIS_TYPE_CHOICES = (
