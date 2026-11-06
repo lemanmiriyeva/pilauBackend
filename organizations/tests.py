@@ -55,3 +55,21 @@ class NomenclatureApiTests(APITestCase):
         self.assertEqual(self.org2.nomenclatures.count(), 1)
         self.client.delete(f"{self.base}{self.org2.id}/nomenclature/{n['id']}/")
         self.assertEqual(self.org2.nomenclatures.count(), 0)
+
+
+class NomenclatureAuditTests(NomenclatureApiTests):
+    def test_changes_are_logged(self):
+        from audit.models import AuditLog
+        op, cat, sub = self._catalog()
+        r = self.client.post(self.base + "nomenclatures/", {"operation_type": op["id"], "category": cat["id"],
+                                                            "name": "Z", "note": "a"}, format="json").json()
+        self.client.patch(f"{self.base}nomenclatures/{r['id']}/", {"note": "b"}, format="json")
+        self.client.post(f"{self.base}{self.org1.id}/nomenclature/", {"nomenclature_ids": [r["id"]]}, format="json")
+        self.client.delete(f"{self.base}nomenclatures/{r['id']}/")
+        actions = set(AuditLog.objects.values_list("action", flat=True))
+        for a in ("NOMENCLATURE_CREATED", "NOMENCLATURE_UPDATED", "NOMENCLATURE_ASSIGNED",
+                  "NOMENCLATURE_DELETED", "NOMENCLATURE_CATALOG_CREATED"):
+            self.assertIn(a, actions)
+        upd = AuditLog.objects.get(action="NOMENCLATURE_UPDATED")
+        self.assertIn("qeyd", upd.detail)
+        self.assertEqual(upd.user, self.admin)

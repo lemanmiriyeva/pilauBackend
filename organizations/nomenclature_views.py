@@ -24,6 +24,8 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from authentication.utils import get_client_ip, log_security_event
+
 from .models import (
     Nomenclature, NomenclatureCategory, NomenclatureOperationType, NomenclatureSubcategory, Organization,
 )
@@ -36,6 +38,23 @@ DEFAULT_OPERATION_TYPES = ["İdxal", "İxrac", "ƏDV azad olma", "Satış", "İs
 def _need_admin(user):
     if not is_full_admin(user):
         raise PermissionDenied("Bu əməliyyat yalnız Nazirlik admini üçündür.")
+
+
+def _log(request, event, extra):
+    """Nomenklaturada hər əlavə/dəyişiklik/silmə audit jurnalına (audit.AuditLog) yazılır."""
+    log_security_event(event, user=request.user, ip=get_client_ip(request) or "", extra=extra)
+
+
+def _snapshot(n):
+    return {
+        "ad": n.name, "emeliyyat_novu": n.operation_type.name, "kateqoriya": n.category.name,
+        "alt_kateqoriya": n.subcategory.name if n.subcategory_id else "", "olcu_vahidi": n.unit,
+        "qeyd": n.note, "teskilatlar": sorted(n.organizations.values_list("full_name", flat=True)),
+    }
+
+
+def _diff(before, after):
+    return "; ".join(f"{k}: {before[k]!r} -> {after[k]!r}" for k in after if before.get(k) != after[k]) or "dəyişiklik yoxdur"
 
 
 def visible_nomenclatures(user):
@@ -125,7 +144,8 @@ class NomenclatureListCreateView(APIView):
         _need_admin(request.user)
         ser = NomenclatureSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        ser.save()
+        obj = ser.save()
+        _log(request, "NOMENCLATURE_CREATED", f"id={obj.id} {_snapshot(obj)}")
         return Response(ser.data, status=201)
 
 
@@ -140,14 +160,22 @@ class NomenclatureDetailView(APIView):
 
     def patch(self, request, pk):
         _need_admin(request.user)
-        ser = NomenclatureSerializer(self._get(request, pk), data=request.data, partial=True)
+        obj = self._get(request, pk)
+        before = _snapshot(obj)
+        ser = NomenclatureSerializer(obj, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
-        ser.save()
+        obj = ser.save()
+        obj = Nomenclature.objects.get(pk=obj.pk)
+        _log(request, "NOMENCLATURE_UPDATED", f"id={obj.id} {_diff(before, _snapshot(obj))}")
         return Response(ser.data)
 
     def delete(self, request, pk):
         _need_admin(request.user)
-        self._get(request, pk).delete()
+        obj = self._get(request, pk)
+        snap = _snapshot(obj)
+        obj_id = obj.id
+        obj.delete()
+        _log(request, "NOMENCLATURE_DELETED", f"id={obj_id} {snap}")
         return Response(status=204)
 
 
@@ -200,6 +228,7 @@ class CatalogView(APIView):
         else:
             obj = NomenclatureOperationType.objects.filter(name__iexact=name).first() \
                 or NomenclatureOperationType.objects.create(name=name)
+        _log(request, "NOMENCLATURE_CATALOG_CREATED", f"{self.kind}: id={obj.id} ad={obj.name!r}")
         return Response(self._serialize(obj), status=201)
 
 
@@ -211,10 +240,12 @@ class CatalogDetailView(CatalogView):
     def delete(self, request, pk):
         _need_admin(request.user)
         obj = get_object_or_404(self._model(), pk=pk)
+        label = f"{self.kind}: id={obj.id} ad={obj.name!r}"
         try:
             obj.delete()
         except ProtectedError:
             raise ValidationError({"detail": "Bu qeyd nomenklaturada istifadə olunur, silmək olmaz."})
+        _log(request, "NOMENCLATURE_CATALOG_DELETED", label)
         return Response(status=204)
 
 
@@ -241,6 +272,8 @@ class OrganizationNomenclatureView(APIView):
             raise ValidationError({"nomenclature_ids": "Siyahı göndərin."})
         items = Nomenclature.objects.filter(pk__in=ids)
         org.nomenclatures.add(*items)
+        _log(request, "NOMENCLATURE_ASSIGNED",
+             f"teşkilat={org.full_name!r} (id={org.id}) nomenklaturalar={[i.name for i in items]}")
         return Response({"assigned": items.count()}, status=201)
 
 
@@ -250,5 +283,7 @@ class OrganizationNomenclatureUnassignView(APIView):
     def delete(self, request, pk, nomenclature_id):
         _need_admin(request.user)
         org = get_object_or_404(Organization, pk=pk)
-        org.nomenclatures.remove(get_object_or_404(Nomenclature, pk=nomenclature_id))
+        item = get_object_or_404(Nomenclature, pk=nomenclature_id)
+        org.nomenclatures.remove(item)
+        _log(request, "NOMENCLATURE_UNASSIGNED", f"teşkilat={org.full_name!r} (id={org.id}) nomenklatura={item.name!r} (id={item.id})")
         return Response(status=204)
