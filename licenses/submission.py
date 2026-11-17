@@ -4,9 +4,10 @@ Məcburi sənədlər artıq yaradılma anında bloklayıcı deyil: bir və ya bi
 çatışmırsa sənəd 'qaralama' (natamam) statusunda qalır. Çatışmayan fayllar yükləndikdə
 (və ya yaradılma anında hamısı varsa) submit_if_complete() sənədi növbəti addıma göndərir.
 """
+from django.conf import settings
 from django.utils import timezone
 
-from licenses.field_schema import get_schema
+from licenses.field_schema import APPROVAL_LISENZIYA_TYPES, get_schema
 from licenses.models import ApprovalSettings, LicenseCertificate
 
 
@@ -33,6 +34,11 @@ def submit_if_complete(document) -> bool:
     """
     if document.status != "qaralama":
         return False
+
+    # Köhnə lisenziyaların yerləşdirilməsi (müvəqqəti): sənəd çatışmasa da natamam qalmır,
+    # yoxlamaya göndərilmir - birbaşa aktiv + "yoxlanılmış". Bax settings.LEGACY_LICENSE_IMPORT_MODE.
+    if getattr(settings, "LEGACY_LICENSE_IMPORT_MODE", False) and document.doc_type in APPROVAL_LISENZIYA_TYPES:
+        return _activate_as_verified(document)
     if missing_required_files(document):
         return False
 
@@ -52,4 +58,19 @@ def submit_if_complete(document) -> bool:
         document.status = "gozleyir"
         document.save()
         notify_stage1_reviewers(document)
+    return True
+
+def _activate_as_verified(document) -> bool:
+    now = timezone.now()
+    who = document.created_by
+    note = "Köhnə lisenziya - sistemə yerləşdirmə rejimi (avtomatik yoxlanılmış)."
+    document.submitted_at = now
+    document.approval_stage = 2
+    document.stage1_approved_by, document.stage1_approved_at, document.stage1_comment = who, now, note
+    document.stage2_approved_by, document.stage2_approved_at, document.stage2_comment = who, now, note
+    document.operator_decision = "ugurlu"
+    document.operator_reviewed_by, document.operator_reviewed_at, document.operator_comment = who, now, note
+    document.status = "aktiv"
+    document.save()
+    LicenseCertificate.objects.get_or_create(permit_document=document, defaults={"form_data": document.form_data})
     return True

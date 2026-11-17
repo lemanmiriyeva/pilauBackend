@@ -256,6 +256,12 @@ TEMP_TOKEN_TTL_SECONDS = 300
 
 MAX_FAILED_LOGIN_ATTEMPTS = 3
 
+# MÜVƏQQƏTİ: köhnə lisenziyaların sistemə yerləşdirilməsi rejimi. Açıq olduqda yeni lisenziya
+# sənədləri çatışmasa belə "natamam" qalmır və yoxlamaya/təsdiqə göndərilmir - dərhal AKTİV
+# ("hazır yoxlanılmış") olur və rəsmi sənədi yaranır. Yerləşdirmə bitəndə .env-də
+# LEGACY_LICENSE_IMPORT_MODE=false yazın (və ya bu sətrin default-unu False edin).
+LEGACY_LICENSE_IMPORT_MODE = config("LEGACY_LICENSE_IMPORT_MODE", default=True, cast=bool)
+
 PASSWORD_RESET_CODE_TTL_MINUTES = 10
 
 ADMIN_CONTACT_EMAIL = config(

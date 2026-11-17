@@ -58,3 +58,33 @@ class IssueDateTests(APITestCase):
         d.status = "aktiv"; d.save()
         d.refresh_from_db()
         self.assertIsNotNone(d.issue_date)
+
+
+class LegacyImportModeTests(APITestCase):
+    def _create(self):
+        from organizations.models import Organization
+        org = Organization.objects.create(full_name="Legacy Org", voen="1000000077")
+        admin = User.objects.create_user("legacy", "l@x.az", "pw", is_staff=True, organization=org)
+        self.client.force_authenticate(admin)
+        return self.client.post("/api/licenses/permit-documents/", {
+            "doc_type": "xususi_lisenziya", "organization": org.id, "submission_mode": "file",
+            "applicant_name": "Legacy Org", "voen": "1000000077",
+            "form_data": {"mehsulun_novu": "X", "lisenziya_tipi": "t", "fealiyyet_sahesi": "herbi_texnika",
+                          "istinad_maddesi_bendleri": ["a"]},
+        }, format="json")
+
+    def test_active_without_documents_in_legacy_mode(self):
+        from django.test import override_settings
+        with override_settings(LEGACY_LICENSE_IMPORT_MODE=True):
+            r = self._create()
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["status"], "aktiv")
+        self.assertTrue(r.json()["certificate_id"])
+        self.assertTrue(r.json()["issue_date"])
+
+    def test_draft_when_mode_off(self):
+        from django.test import override_settings
+        with override_settings(LEGACY_LICENSE_IMPORT_MODE=False):
+            r = self._create()
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["status"], "qaralama")
