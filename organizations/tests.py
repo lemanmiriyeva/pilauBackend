@@ -103,3 +103,22 @@ class PartnerApiTests(APITestCase):
         actions = set(AuditLog.objects.values_list("action", flat=True))
         for x in ("PARTNER_CREATED", "PARTNER_UPDATED", "PARTNER_ASSIGNED", "PARTNER_UNASSIGNED"):
             self.assertIn(x, actions)
+
+
+class OrganizationPatchRoundTripTests(APITestCase):
+    def test_patch_with_get_payload_does_not_500(self):
+        from .models import AuthorizedPerson, OrganizationDepartment, OrganizationPosition
+        admin = User.objects.create_user("rt", "rt@x.az", "pw", is_staff=True, is_superuser=True)
+        org = Organization.objects.create(full_name="RT", voen="1000000088")
+        dept = OrganizationDepartment.objects.create(organization=org, name="D")
+        pos = OrganizationPosition.objects.create(organization=org, department=dept, name="P")
+        User.objects.create_user("emp", "emp@x.az", "pw", organization=org, department=dept, position=pos)
+        AuthorizedPerson.objects.create(organization=org, full_name="X", fin_kod="1234567")
+        self.client.force_authenticate(admin)
+        data = self.client.get(f"/api/organizations/{org.id}/").json()
+        data["full_name"] = "RT 2"
+        r = self.client.patch(f"/api/organizations/{org.id}/", data, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        org.refresh_from_db()
+        self.assertEqual(org.full_name, "RT 2")
+        self.assertEqual(org.authorized_persons.count(), 1)

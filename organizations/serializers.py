@@ -190,12 +190,21 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
                     organization=organization, department=department, name=position_name,
                 )
 
+    @staticmethod
+    def _person_kwargs(organization, person_data):
+        """Redaktə formu GET cavabını olduğu kimi geri göndərəndə səlahiyyətli şəxsin içində
+        'organization' (və 'id') də olur - təşkilat həmişə burada təyin olunur, əks halda
+        'multiple values for keyword argument organization' ilə 500 xətası verirdi."""
+        data = {k: v for k, v in dict(person_data).items() if k not in ("id", "organization")}
+        data["organization"] = organization
+        return data
+
     def create(self, validated_data):
         persons_data = validated_data.pop("authorized_persons", [])
         departments_data = validated_data.pop("departments", [])
         organization = Organization.objects.create(**validated_data)
         for person_data in persons_data:
-            AuthorizedPerson.objects.create(organization=organization, **person_data)
+            AuthorizedPerson.objects.create(**self._person_kwargs(organization, person_data))
         self._save_departments(organization, departments_data)
         return organization
 
@@ -209,7 +218,7 @@ class OrganizationDetailSerializer(serializers.ModelSerializer):
         if persons_data is not None:
             instance.authorized_persons.all().delete()
             for person_data in persons_data:
-                AuthorizedPerson.objects.create(organization=instance, **person_data)
+                AuthorizedPerson.objects.create(**self._person_kwargs(instance, person_data))
 
         if departments_data is not None:
             self._save_departments(instance, departments_data)
