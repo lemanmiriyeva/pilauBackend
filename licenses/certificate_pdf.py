@@ -293,27 +293,26 @@ def build_certificate_pdf(certificate) -> bytes:
     cap_para.drawOn(c, MARGIN, L.y - ch)
     L.y -= ch + 8 * mm
 
-    # --- İmzalayan vəzifəli şəxs / Vəzifəsi ---
+    # --- İmza bloku (sənədin aşağısı): imza xətti + imzalayan rəhbərin adı və vəzifəsi; sağda M.Y. ---
     signer_name, signer_position = _signer_info(document, certificate)
-    L.inline_label("Lisenziyanı imzalayan vəzifəli şəxs")
-    L.blank_value(signer_name, "adı və soyadı")
+    L.y -= 14 * mm
 
-    L.inline_label("Vəzifəsi")
-    L.blank_value(signer_position, None)
-
-    L.y -= 8 * mm
-
-    # --- İmza + M.Y. (möhür yeri) ---
-    sig_line_w = 60 * mm
+    sig_line_w = 70 * mm
     c.setStrokeColor(BORDER)
     c.setLineWidth(0.6)
     c.line(MARGIN, L.y, MARGIN + sig_line_w, L.y)
     c.setFont(FONT_REGULAR, 8)
     c.setFillColor(MUTED)
-    c.drawCentredString(MARGIN + sig_line_w / 2, L.y - 10, "(imza)")
+    c.drawString(MARGIN, L.y - 10, "(imza)")
+    c.setFont(FONT_BOLD, 10.5)
+    c.setFillColor(INK)
+    c.drawString(MARGIN, L.y - 24, signer_name or "")
+    c.setFont(FONT_REGULAR, 9)
+    c.setFillColor(MUTED)
+    c.drawString(MARGIN, L.y - 37, signer_position or "")
 
     seal_cx = PAGE_W - MARGIN - 24 * mm
-    seal_cy = L.y - 12 * mm
+    seal_cy = L.y - 8 * mm
     c.setFont(FONT_BOLD, 10)
     c.setFillColor(INK)
     c.drawString(PAGE_W - MARGIN - 60 * mm, L.y + 2, "M.Y.")

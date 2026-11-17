@@ -906,6 +906,29 @@ class ApproversListView(APIView):
 # ELIGIBLE MSN USERS
 # ============================================================================
 
+def _serialize_users(users):
+    return [
+        {
+            "id": u.id,
+            "full_name": f"{u.first_name} {u.last_name}".strip() or u.username,
+            "department": u.department.name if u.department else "",
+            "position": u.position.name if u.position else "",
+        }
+        for u in users
+    ]
+
+
+def _signer_candidates():
+    """Sənədi imzalaya biləcək şəxslər - YALNIZ rəhbərlik (nazir, nazir müavinləri):
+    istifadəçi formasında 'Rəhbərlik' kimi işarələnmiş (User.rehber_kadr) aktiv istifadəçilər."""
+    users = (
+        User.objects.filter(is_active=True, rehber_kadr=True)
+        .select_related("department", "position")
+        .order_by("first_name", "last_name")
+    )
+    return _serialize_users(users)
+
+
 def _eligible_msn_users(doc_type):
     approver_ids = (
         ApproverPermission.objects
@@ -1191,6 +1214,7 @@ class WorkflowConfigView(APIView):
         }
 
         rows = []
+        signer_candidates = _signer_candidates()
 
         for key, label in APPROVAL_FLOW_DOC_TYPES:
             config = configs_by_type.get(
@@ -1236,6 +1260,8 @@ class WorkflowConfigView(APIView):
                 "eligible_users": (
                     _eligible_msn_users(key)
                 ),
+
+                "signer_candidates": signer_candidates,
             })
 
         return Response(rows)
@@ -1389,19 +1415,13 @@ class WorkflowConfigView(APIView):
         # SIGNER USER
         # --------------------------------------------------------------------
 
-        if (
-                signer_user_id is not None
-                and signer_user_id not in eligible_ids
-        ):
+        # İmzalayan şəxs yalnız rəhbərlikdən seçilə bilər (dəyişdirilməyibsə köhnə seçim qalır).
+        signer_ok_ids = {u["id"] for u in _signer_candidates()}
+        if existing and existing.signer_user_id:
+            signer_ok_ids.add(existing.signer_user_id)
+        if signer_user_id is not None and signer_user_id not in signer_ok_ids:
             return Response(
-                {
-                    "detail": (
-                        "Seçilən istifadəçinin "
-                        "bu kateqoriya üzrə "
-                        "imzalama hüququ "
-                        "yoxdur."
-                    )
-                },
+                {"detail": "İmzalayan şəxs yalnız rəhbərlikdən (nazir, nazir müavinləri) ola bilər."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
