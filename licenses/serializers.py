@@ -53,13 +53,21 @@ class PermitDocumentDetailSerializer(serializers.ModelSerializer):
         source="operator_reviewed_by.get_full_name", read_only=True, default=""
     )
     missing_files = serializers.SerializerMethodField()
+    signer_name = serializers.SerializerMethodField()
+    signer_position = serializers.SerializerMethodField()
+
+    def get_signer_name(self, obj):
+        return (obj.signer.get_full_name() or obj.signer.username) if obj.signer_id else ""
+
+    def get_signer_position(self, obj):
+        return obj.signer.position.name if obj.signer_id and obj.signer.position_id else ""
 
     class Meta:
         model = PermitDocument
         fields = [
             "id", "doc_type", "category", "number", "title",
             "submission_mode", "is_confidential", "form_data", "files",
-            "organization", "authorized_person",
+            "organization", "authorized_person", "signer", "signer_name", "signer_position",
             "applicant_name", "voen", "fin_kod", "department", "position", "phone", "email",
             "issue_date", "expiry_date", "status",
             "approval_stage",
@@ -94,7 +102,7 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
         model = PermitDocument
         fields = [
             "id", "doc_type", "title", "submission_mode", "is_confidential", "form_data",
-            "organization", "authorized_person",
+            "organization", "authorized_person", "signer",
             "applicant_name", "voen", "fin_kod", "department", "position", "phone", "email",
             "issue_date", "expiry_date", "status",
             "number",
@@ -105,6 +113,12 @@ class PermitDocumentCreateSerializer(serializers.ModelSerializer):
         # alınmamalıdır. "Bitmə tarixi" də eyni səbəbdən (yalnız EXPIRING_DOC_TYPES
         # üçün avtomatik hesablanır) read-only saxlanılır.
         read_only_fields = ["id", "number", "issue_date", "expiry_date", "status"]
+
+    def validate_signer(self, value):
+        from licenses.signers import signer_candidates_qs
+        if value is not None and not signer_candidates_qs().filter(pk=value.pk).exists():
+            raise serializers.ValidationError("İmzalayan şəxs yalnız rəhbərlikdən (nazir, nazir müavinləri) ola bilər.")
+        return value
 
     def validate(self, attrs):
         doc_type = attrs.get("doc_type")

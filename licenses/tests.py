@@ -88,3 +88,28 @@ class LegacyImportModeTests(APITestCase):
             r = self._create()
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["status"], "qaralama")
+
+
+class SignerSelectionTests(TestCase):
+    def setUp(self):
+        from authentication.models import User
+        from rest_framework.test import APIClient
+        self.admin = User.objects.create_user(username="adm", email="a1@x.az", password="x", is_staff=True, is_superuser=True)
+        self.lead = User.objects.create_user(username="lead", email="a2@x.az", password="x", first_name="Hidayət", last_name="Əzimov", rehber_kadr=True)
+        self.other = User.objects.create_user(username="oth", email="a3@x.az", password="x")
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_candidates_endpoint_only_leadership(self):
+        r = self.client.get("/api/licenses/signer-candidates/")
+        self.assertEqual(r.status_code, 200)
+        ids = [x["id"] for x in r.json()]
+        self.assertIn(self.lead.id, ids)
+        self.assertNotIn(self.other.id, ids)
+
+    def test_signer_validation(self):
+        from licenses.serializers import PermitDocumentCreateSerializer
+        f = PermitDocumentCreateSerializer().fields["signer"]
+        self.assertEqual(f.run_validation(self.lead.id), self.lead)
+        with self.assertRaises(Exception):
+            PermitDocumentCreateSerializer().validate_signer(self.other)

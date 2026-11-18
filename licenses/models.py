@@ -75,6 +75,12 @@ class PermitDocument(models.Model):
         "organizations.AuthorizedPerson", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="permit_documents",
     )
+    # Sənədi imzalayan rəhbər (nazir / nazir müavini) - Lisenziya yarat formasında seçilir.
+    # Boşdursa Təsdiq axınındakı (DocumentWorkflowConfig.signer_user) imzalayan istifadə olunur.
+    signer = models.ForeignKey(
+        "authentication.User", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="signed_documents",
+    )
     applicant_name = models.CharField("Müraciətçi müəssisənin tam adı", max_length=255, blank=True)
     voen = models.CharField("VÖEN", max_length=20, blank=True)
     fin_kod = models.CharField("FİN kod", max_length=10, blank=True)

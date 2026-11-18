@@ -333,6 +333,15 @@ class ApprovalSettingsView(APIView):
         return Response(serializer.data)
 
 
+class SignerCandidatesView(APIView):
+    """Lisenziya yarat formasındakı 'İmzalayan şəxs' seçimi - yalnız rəhbərlik (nazir, nazir müavinləri)."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from licenses.signers import signer_candidates
+        return Response(signer_candidates())
+
+
 class ApplicantInfoView(APIView):
     """Image 3/4 - 'Müraciətçi məlumatları' bölməsini avtomatik doldurmaq üçün
     cari istifadəçinin təşkilatı və səlahiyyətli şəxslər siyahısı."""

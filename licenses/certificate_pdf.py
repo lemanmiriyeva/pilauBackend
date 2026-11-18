@@ -113,16 +113,17 @@ def _applicant_block(document):
 def _signer_info(document, certificate):
     """İmzalayan vəzifəli şəxs / vəzifəsi.
 
-    Əsas mənbə: 'Təsdiq axını' ekranında bu sənəd növü (doc_type) üçün təyin edilmiş
+    Əsas mənbə: Lisenziya yarat formasında seçilmiş imzalayan (PermitDocument.signer); yoxdursa
+    'Təsdiq axını' ekranında bu sənəd növü (doc_type) üçün təyin edilmiş
     İmzalayan şəxs (workflow.DocumentWorkflowConfig.signer_user) - bax workflow/views.py
     WorkflowConfigView, frontend lisenziya-icazeleri/tesdiq-axini/page.js.
 
     Təyin olunmayıbsa (signer_user boşdursa) ad/vəzifə boş qalır."""
     from workflow.models import DocumentWorkflowConfig
 
-    user = None
-    config = DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
-    if config and config.signer_user_id:
+    user = document.signer if getattr(document, "signer_id", None) else None
+    config = None if user else DocumentWorkflowConfig.objects.filter(doc_type=config_doc_type(document.doc_type)).first()
+    if not user and config and config.signer_user_id:
         user = config.signer_user
 
     # İmzalayan təyin olunmayıbsa, təsdiqçi/tamamlayan şəxsin (çox vaxt 'root') adını YAZMIRIQ -

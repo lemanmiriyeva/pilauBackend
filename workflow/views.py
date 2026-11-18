@@ -919,18 +919,9 @@ def _serialize_users(users):
 
 
 def _signer_candidates():
-    """Sənədi imzalaya biləcək şəxslər - YALNIZ rəhbərlik (nazir, nazir müavinləri):
-    istifadəçi formasında 'Rəhbərlik' kimi işarələnmiş (User.rehber_kadr) və ya vəzifəsində 'nazir' (Nazir,
-    Nazir müavini) olan aktiv istifadəçilər."""
-    users = (
-        User.objects.filter(
-            Q(rehber_kadr=True) | Q(position__name__icontains="nazir"),
-            is_active=True,
-        )
-        .select_related("department", "position")
-        .order_by("first_name", "last_name")
-    )
-    return _serialize_users(users)
+    """Sənədi imzalaya biləcək şəxslər - yalnız rəhbərlik (bax licenses/signers.py)."""
+    from licenses.signers import signer_candidates
+    return signer_candidates()
 
 
 def _eligible_msn_users(doc_type):
