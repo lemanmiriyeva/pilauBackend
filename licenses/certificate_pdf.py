@@ -117,9 +117,7 @@ def _signer_info(document, certificate):
     İmzalayan şəxs (workflow.DocumentWorkflowConfig.signer_user) - bax workflow/views.py
     WorkflowConfigView, frontend lisenziya-icazeleri/tesdiq-axini/page.js.
 
-    Təyin olunmayıbsa (signer_user boşdursa), köhnə davranışa - faktiki 2-ci mərhələ
-    təsdiqçisinə, o da yoxdursa sənədi 'Tamamlandı' edən şəxsə - geri düşür ki, köhnə
-    sənədlər üçün sahə boş qalmasın."""
+    Təyin olunmayıbsa (signer_user boşdursa) ad/vəzifə boş qalır."""
     from workflow.models import DocumentWorkflowConfig
 
     user = None
@@ -127,9 +125,8 @@ def _signer_info(document, certificate):
     if config and config.signer_user_id:
         user = config.signer_user
 
-    if not user:
-        user = document.stage2_approved_by or certificate.completed_by
-
+    # İmzalayan təyin olunmayıbsa, təsdiqçi/tamamlayan şəxsin (çox vaxt 'root') adını YAZMIRIQ -
+    # imzalayan yalnız rəhbərlikdən olmalıdır; ad boş qalır ki, səhv şəxs görünməsin.
     if not user:
         return "", ""
 

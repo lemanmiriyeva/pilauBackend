@@ -920,9 +920,13 @@ def _serialize_users(users):
 
 def _signer_candidates():
     """Sənədi imzalaya biləcək şəxslər - YALNIZ rəhbərlik (nazir, nazir müavinləri):
-    istifadəçi formasında 'Rəhbərlik' kimi işarələnmiş (User.rehber_kadr) aktiv istifadəçilər."""
+    istifadəçi formasında 'Rəhbərlik' kimi işarələnmiş (User.rehber_kadr) və ya vəzifəsində 'nazir' (Nazir,
+    Nazir müavini) olan aktiv istifadəçilər."""
     users = (
-        User.objects.filter(is_active=True, rehber_kadr=True)
+        User.objects.filter(
+            Q(rehber_kadr=True) | Q(position__name__icontains="nazir"),
+            is_active=True,
+        )
         .select_related("department", "position")
         .order_by("first_name", "last_name")
     )
