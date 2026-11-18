@@ -138,6 +138,20 @@ def _signer_info(document, certificate):
 
     return name, position
 
+LICENSE_TITLES = {
+    "xususi_lisenziya": "XÜSUSİ LİSENZİYA",
+    "umumi_lisenziya": "ÜMUMİ LİSENZİYA",
+    "istehsal": "LİSENZİYA",
+}
+
+
+def _certificate_title(document):
+    """Blankın başlığı: Ümumi lisenziya -> 'ÜMUMİ LİSENZİYA', Xüsusi lisenziya -> 'XÜSUSİ LİSENZİYA'."""
+    if document.doc_type in LICENSE_TITLES:
+        return LICENSE_TITLES[document.doc_type]
+    return document.get_doc_type_display().replace("i", "İ").upper()
+
+
 def _label_style():
     return ParagraphStyle("field_label", fontName=FONT_REGULAR, fontSize=8, leading=10, textColor=MUTED)
 
@@ -189,10 +203,101 @@ class _Layout:
             self.y -= 3 * mm
 
 
+# --- Skan edilmiş rəsmi blank üzərinə yazı ---------------------------------------------------
+# licenses/assets/blank_<doc_type>.jpg varsa, PDF həmin blankın (gerb, çərçivə, başlıq daxil)
+# üzərinə yalnız dəyərləri yazır. Koordinatlar blankın 100 dpi-də ölçülmüş piksel mövqeləridir
+# (letter 8.5x11 düym = 850x1100 px). Blank faylı yoxdursa aşağıdakı ümumi tərtibat işlədilir.
+TEMPLATE_PX = 0.72  # 1 px (100 dpi) = 0.72 pt
+TEMPLATE_PAGE = (612.0, 792.0)
+
+
+def _template_path(doc_type):
+    path = os.path.join(ASSETS_DIR, f"blank_{doc_type}.jpg")
+    return path if os.path.exists(path) else None
+
+
+def _wrap(text, font, size, widths):
+    """Mətni sətirlərə böl; widths[i] - i-ci sətrin max eni (pt). Sığmayan qalıq sonuncu sətirdə qalır."""
+    words = (text or "").split()
+    lines, cur, i = [], "", 0
+    for w in words:
+        limit = widths[min(i, len(widths) - 1)]
+        trial = f"{cur} {w}".strip()
+        if stringWidth(trial, font, size) <= limit or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur, i = w, i + 1
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _build_on_template(certificate, template_path):
+    document = certificate.permit_document
+    schema = get_schema(document.doc_type)["form_fields"]
+    buffer = io.BytesIO()
+    pw, ph = TEMPLATE_PAGE
+    c = canvas.Canvas(buffer, pagesize=TEMPLATE_PAGE)
+    c.setTitle(certificate.number)
+    c.drawImage(template_path, 0, 0, width=pw, height=ph)
+    c.setFillColor(colors.HexColor("#101010"))
+
+    def X(px):
+        return px * TEMPLATE_PX
+
+    def Y(px):  # xəttin üstündə yazı baza xətti
+        return ph - px * TEMPLATE_PX + 2.5
+
+    def text_at(px_x, px_y, text, size=10, bold=False, center_to=None):
+        c.setFont(FONT_BOLD if bold else FONT_REGULAR, size)
+        if center_to:
+            c.drawCentredString(X((px_x + center_to) / 2), Y(px_y), text)
+        else:
+            c.drawString(X(px_x), Y(px_y), text)
+
+    # Qeydiyyat nömrəsi və tarix
+    text_at(282, 328, certificate.number, 10.5, bold=True)
+    d = document.issue_date
+    if d:
+        text_at(521, 328, f"{d.day:02d}", 10, center_to=553)
+        text_at(565, 328, MONTHS_AZ[d.month - 1], 10, center_to=640)
+        text_at(650, 328, str(d.year), 10, center_to=708)
+
+    # Verən orqan
+    name, address = _issuing_authority()
+    text_at(165, 367, name, 10)
+    text_at(165, 414, address, 10)
+
+    # Fəaliyyət növü: 461/508/555/602 tam en, 649 - "həyata keçirməyə icazə verir" sözünədək
+    full_w = X(700 - 165)
+    last_w = X(530 - 165)
+    lines = _wrap(_activity_description(document, schema), FONT_REGULAR, 10, [full_w] * 4 + [last_w])
+    for ln, y in zip(lines, (461, 508, 555, 602, 649)):
+        text_at(165, y, ln, 10)
+
+    # Lisenziya verilib: 697 (etiketdən sonra), 744, 791
+    lines = _wrap(_applicant_block(document), FONT_REGULAR, 10, [X(700 - 258), X(700 - 165), X(700 - 165)])
+    for ln, (x, y) in zip(lines, ((258, 697), (165, 744), (165, 791))):
+        text_at(x, y, ln, 10)
+
+    # İmzalayan vəzifəli şəxs və vəzifəsi (imza xətti və M.Y. əllə doldurulmaq üçün boş qalır)
+    signer_name, signer_position = _signer_info(document, certificate)
+    text_at(374, 835, signer_name, 10.5, bold=True)
+    text_at(224, 877, signer_position, 10.5, bold=True)
+
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
 def build_certificate_pdf(certificate) -> bytes:
-    """LicenseCertificate obyektindən rəsmi 'ÜMUMİ LİSENZİYA' formatında PDF bayt axını qaytarır."""
+    """LicenseCertificate obyektindən rəsmi lisenziya blankı formatında PDF bayt axını qaytarır."""
     _ensure_fonts_registered()
     document = certificate.permit_document
+    template = _template_path(document.doc_type)
+    if template:
+        return _build_on_template(certificate, template)
     schema = get_schema(document.doc_type)["form_fields"]
 
     buffer = io.BytesIO()
@@ -226,7 +331,7 @@ def build_certificate_pdf(certificate) -> bytes:
     # --- Başlıq (hərf-arası boşluqlu, blankdakı effektə bənzər) ---
     c.setFont(FONT_BOLD, 20)
     c.setFillColor(INK)
-    title = "ÜMUMİ LİSENZİYA"
+    title = _certificate_title(document)
     letter_gap = 1.6
     total_w = sum(stringWidth(ch, FONT_BOLD, 20) + letter_gap for ch in title) - letter_gap
     x = (PAGE_W - total_w) / 2
@@ -274,9 +379,13 @@ def build_certificate_pdf(certificate) -> bytes:
     activity = _activity_description(document, schema)
     L.blank_value(activity, "lisenziya verilən fəaliyyət növü (bütün alt növlər)", min_lines=3)
 
+    permit_text = "həyata keçirməyə icazə verir."
     c.setFont(FONT_REGULAR, 10.5)
     c.setFillColor(INK)
-    c.drawString(MARGIN, L.y - 10, "həyata keçirməyə icazə verir.")
+    c.drawRightString(PAGE_W - MARGIN, L.y - 10, permit_text)
+    c.setStrokeColor(BORDER)
+    c.setLineWidth(0.6)
+    c.line(MARGIN, L.y - 12, PAGE_W - MARGIN - stringWidth(permit_text, FONT_REGULAR, 10.5) - 2, L.y - 12)
     L.y -= 16 * mm
 
     # --- Kimə verilib ---
@@ -291,29 +400,44 @@ def build_certificate_pdf(certificate) -> bytes:
     cap_para.drawOn(c, MARGIN, L.y - ch)
     L.y -= ch + 8 * mm
 
-    # --- İmza bloku (sənədin aşağısı): imza xətti + imzalayan rəhbərin adı və vəzifəsi; sağda M.Y. ---
+    # --- İmzalayan vəzifəli şəxs (blankdakı kimi): ad-soyad, vəzifə, imza xətti, M.Y. ---
     signer_name, signer_position = _signer_info(document, certificate)
-    L.y -= 14 * mm
+    L.y -= 6 * mm
 
-    sig_line_w = 70 * mm
+    def _labelled_line(label, value, caption=None):
+        c.setFont(FONT_REGULAR, 10.5)
+        c.setFillColor(INK)
+        c.drawString(MARGIN, L.y - 12, label)
+        lx = MARGIN + stringWidth(label, FONT_REGULAR, 10.5) + 2
+        c.setFont(FONT_BOLD, 10.5)
+        c.drawString(lx + 2, L.y - 11, value or "")
+        c.setStrokeColor(BORDER)
+        c.setLineWidth(0.6)
+        c.line(lx, L.y - 14, PAGE_W - MARGIN, L.y - 14)
+        if caption:
+            c.setFont(FONT_REGULAR, 8)
+            c.setFillColor(MUTED)
+            c.drawCentredString((lx + PAGE_W - MARGIN) / 2, L.y - 24, f"({caption})")
+        L.y -= 12 * mm
+
+    _labelled_line("Lisenziyanı imzalayan vəzifəli şəxs", signer_name, "adı və soyadı")
+    _labelled_line("Vəzifəsi", signer_position)
+
+    L.y -= 6 * mm
+    sig_line_w = 80 * mm
+    sig_x0 = (PAGE_W - sig_line_w) / 2
     c.setStrokeColor(BORDER)
     c.setLineWidth(0.6)
-    c.line(MARGIN, L.y, MARGIN + sig_line_w, L.y)
+    c.line(sig_x0, L.y, sig_x0 + sig_line_w, L.y)
     c.setFont(FONT_REGULAR, 8)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, L.y - 10, "(imza)")
-    c.setFont(FONT_BOLD, 10.5)
-    c.setFillColor(INK)
-    c.drawString(MARGIN, L.y - 24, signer_name or "")
-    c.setFont(FONT_REGULAR, 9)
-    c.setFillColor(MUTED)
-    c.drawString(MARGIN, L.y - 37, signer_position or "")
+    c.drawCentredString(PAGE_W / 2, L.y - 10, "(imza)")
 
-    seal_cx = PAGE_W - MARGIN - 24 * mm
-    seal_cy = L.y - 8 * mm
+    seal_cx = PAGE_W / 2
+    seal_cy = L.y - 30 * mm
     c.setFont(FONT_BOLD, 10)
     c.setFillColor(INK)
-    c.drawString(PAGE_W - MARGIN - 60 * mm, L.y + 2, "M.Y.")
+    c.drawString(MARGIN + 25 * mm, seal_cy + 14 * mm, "M.Y.")
     c.setStrokeColor(colors.HexColor("#C9A24B"))
     c.setLineWidth(0.8)
     c.circle(seal_cx, seal_cy, 16 * mm, stroke=1, fill=0)

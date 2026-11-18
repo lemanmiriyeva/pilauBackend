@@ -113,3 +113,13 @@ class SignerSelectionTests(TestCase):
         self.assertEqual(f.run_validation(self.lead.id), self.lead)
         with self.assertRaises(Exception):
             PermitDocumentCreateSerializer().validate_signer(self.other)
+
+
+class CertificateTitleTests(TestCase):
+    def test_title_by_type(self):
+        from types import SimpleNamespace
+        from licenses.certificate_pdf import _certificate_title
+        d = lambda t, disp="Ixrac": SimpleNamespace(doc_type=t, get_doc_type_display=lambda: disp)
+        self.assertEqual(_certificate_title(d("umumi_lisenziya")), "ÜMUMİ LİSENZİYA")
+        self.assertEqual(_certificate_title(d("xususi_lisenziya")), "XÜSUSİ LİSENZİYA")
+        self.assertEqual(_certificate_title(d("idxal", "İdxal")), "İDXAL")
