@@ -82,20 +82,64 @@ def _issuing_authority():
     return "Azərbaycan Respublikasının Müdafiə Sənayesi Nazirliyi", "Bakı şəhəri, Azərbaycan Respublikası"
 
 
+# İstinad maddəsi bəndləri -> sənəddə yazılan fəaliyyət cümləsi.
+# Hər bənd nömrəsi (1..5) bir və ya bir neçə fəaliyyət ifadəsinə açılır; sonuncu ifadə təsirlik
+# hal alır ("... və saxlanılmasını"), ardınca blankdakı "həyata keçirməyə icazə verir." gəlir.
+_BEND_GROUP_PREFIX = {
+    "texnika": "Döyüş təyinatlı hərbi texnikanın",
+    "silah": "Döyüş təyinatlı hərbi silahın",
+    "sursat": "Döyüş sursatının",
+}
+_BEND_PHRASES = {
+    "1": ["layihələndirilməsi"],
+    "2": ["istehsalı", "sınaqdan keçirilməsi"],
+    "3": ["quraşdırılması", "montajı", "təmiri", "texniki xidmət göstərilməsi"],
+    "4": ["saxlanılması"],
+    "5": ["utilizasiyası"],
+}
+_BEND_PHRASES_SURSAT_3 = ["təmiri", "texniki xidmət göstərilməsi"]
+
+
+def _accusative(phrase):
+    return phrase + ("nı" if phrase.endswith("ı") else "ni")
+
+
+def _bend_sentence(selected_keys):
+    """Seçilmiş istinad maddəsi bəndlərindən cümlə qurur, məs.:
+    'Döyüş təyinatlı hərbi texnikanın layihələndirilməsi, istehsalı, sınaqdan keçirilməsi,
+    quraşdırılması, montajı, təmiri, texniki xidmət göstərilməsi və saxlanılmasını'"""
+    selected = set(selected_keys or [])
+    sentences = []
+    for group in ("texnika", "silah", "sursat"):
+        phrases = []
+        for n in "12345":
+            if f"bend_{group}_{n}" in selected:
+                phrases.extend(_BEND_PHRASES_SURSAT_3 if (group == "sursat" and n == "3") else _BEND_PHRASES[n])
+        if not phrases:
+            continue
+        if len(phrases) == 1:
+            body = _accusative(phrases[0])
+        else:
+            body = ", ".join(phrases[:-1]) + " və " + _accusative(phrases[-1])
+        prefix = _BEND_GROUP_PREFIX[group]
+        if sentences:
+            prefix = prefix[0].lower() + prefix[1:]
+        sentences.append(f"{prefix} {body}")
+    return "; ".join(sentences)
+
+
 def _activity_description(document, schema):
-    """Fəaliyyət növü sətri - anketdəki məhsul/fəaliyyət sahəsi kimi sahələrdən (varsa) və ya
-    sənəd kateqoriyasından qurulur. Blankdakı çoxsətirli 'lisenziya verilən fəaliyyət növü'
-    sahəsini doldurur."""
-    parts = []
-    priority_keys = ["mehsul", "mehsulun_novu", "fealiyyet_sahesi"]
+    """Blankdakı 'lisenziya verilən fəaliyyət növü' sahəsi: seçilmiş istinad maddəsi bəndlərindən
+    qurulan cümlə. Nomenklatura bura YAZILMIR. Bənd seçilməyibsə fəaliyyət sahəsi (varsa) və ya
+    sənəd növü yazılır."""
     form_data = document.form_data or {}
+    sentence = _bend_sentence(form_data.get("istinad_maddesi_bendleri"))
+    if sentence:
+        return sentence
     field_defs = {f["key"]: f for f in schema}
-    for key in priority_keys:
-        if form_data.get(key):
-            parts.append(_display_value(field_defs.get(key, {}), form_data[key]))
-    if not parts:
-        parts.append(document.get_doc_type_display())
-    return " / ".join(dict.fromkeys(parts))
+    if form_data.get("fealiyyet_sahesi"):
+        return _display_value(field_defs.get("fealiyyet_sahesi", {}), form_data["fealiyyet_sahesi"])
+    return document.get_doc_type_display()
 
 
 def _applicant_block(document):
@@ -278,9 +322,14 @@ def _build_on_template(certificate, template_path):
     # Fəaliyyət növü: 461/508/555/602 tam en, 649 - "həyata keçirməyə icazə verir" sözünədək
     full_w = X(700 - 165)
     last_w = X(530 - 165)
-    lines = _wrap(_activity_description(document, schema), FONT_REGULAR, 10, [full_w] * 4 + [last_w])
+    activity = _activity_description(document, schema)
+    act_size = 10
+    for act_size in (10, 9.5, 9, 8.5, 8, 7.5, 7):  # uzun cümlə 5 sətrə sığana qədər şrifti kiçilt
+        lines = _wrap(activity, FONT_REGULAR, act_size, [full_w] * 4 + [last_w])
+        if len(lines) <= 5:
+            break
     for ln, y in zip(lines, (461, 508, 555, 602, 649)):
-        text_at(165, y, ln, 10)
+        text_at(165, y, ln, act_size)
 
     # Lisenziya verilib: 697 (etiketdən sonra), 744, 791
     lines = _wrap(_applicant_block(document), FONT_REGULAR, 10, [X(700 - 258), X(700 - 165), X(700 - 165)])

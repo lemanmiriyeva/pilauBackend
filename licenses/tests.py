@@ -123,3 +123,15 @@ class CertificateTitleTests(TestCase):
         self.assertEqual(_certificate_title(d("umumi_lisenziya")), "ÜMUMİ LİSENZİYA")
         self.assertEqual(_certificate_title(d("xususi_lisenziya")), "XÜSUSİ LİSENZİYA")
         self.assertEqual(_certificate_title(d("idxal", "İdxal")), "İDXAL")
+
+
+class BendSentenceTests(TestCase):
+    def test_sentence(self):
+        from licenses.certificate_pdf import _bend_sentence
+        self.assertEqual(
+            _bend_sentence(["bend_texnika_1", "bend_texnika_2", "bend_texnika_3", "bend_texnika_4"]),
+            "Döyüş təyinatlı hərbi texnikanın layihələndirilməsi, istehsalı, sınaqdan keçirilməsi, quraşdırılması, "
+            "montajı, təmiri, texniki xidmət göstərilməsi və saxlanılmasını",
+        )
+        self.assertEqual(_bend_sentence(["bend_silah_4"]), "Döyüş təyinatlı hərbi silahın saxlanılmasını")
+        self.assertEqual(_bend_sentence([]), "")
