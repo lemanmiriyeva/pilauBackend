@@ -241,6 +241,12 @@ def _build_on_template(certificate, template_path):
     c = canvas.Canvas(buffer, pagesize=TEMPLATE_PAGE)
     c.setTitle(certificate.number)
     c.drawImage(template_path, 0, 0, width=pw, height=ph)
+    if document.doc_type == "xususi_lisenziya":
+        # blank_xususi_lisenziya.jpg ümumi blankdan "ÜMUMİ LİSENZİYA" başlığı silinərək hazırlanıb;
+        # başlıq burada yenidən yazılır (blankın mərkəzi: x=637 px/150dpi, baza xətti y=372 px).
+        c.setFillColor(colors.HexColor("#5B6B8C"))
+        c.setFont(FONT_BOLD, 24)
+        c.drawCentredString(pw / 2, ph - 372 * 0.48, _certificate_title(document))
     c.setFillColor(colors.HexColor("#101010"))
 
     def X(px):
