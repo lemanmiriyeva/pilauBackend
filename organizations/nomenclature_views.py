@@ -47,7 +47,7 @@ def _log(request, event, extra):
 
 def _snapshot(n):
     return {
-        "ad": n.name, "emeliyyat_novu": n.operation_type.name, "kateqoriya": n.category.name,
+        "ad": n.name, "emeliyyat_novlari": sorted(n.operation_types.values_list("name", flat=True)), "kateqoriya": n.category.name,
         "alt_kateqoriya": n.subcategory.name if n.subcategory_id else "", "olcu_vahidi": n.unit,
         "qeyd": n.note, "teskilatlar": sorted(n.organizations.values_list("full_name", flat=True)),
     }
@@ -58,8 +58,8 @@ def _diff(before, after):
 
 
 def visible_nomenclatures(user):
-    qs = Nomenclature.objects.select_related("operation_type", "category", "subcategory") \
-        .prefetch_related("organizations")
+    qs = Nomenclature.objects.select_related("category", "subcategory") \
+        .prefetch_related("organizations", "operation_types")
     if is_full_admin(user):
         return qs
     ids = scoped_organization_ids(user)
@@ -69,7 +69,12 @@ def visible_nomenclatures(user):
 
 
 class NomenclatureSerializer(serializers.ModelSerializer):
-    operation_type_name = serializers.CharField(source="operation_type.name", read_only=True)
+    operation_types = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=NomenclatureOperationType.objects.all(), allow_empty=False,
+        error_messages={"empty": "Ən azı bir əməliyyat növü seçin."},
+    )
+    operation_types_detail = serializers.SerializerMethodField()
+    operation_type_name = serializers.SerializerMethodField()
     category_name = serializers.CharField(source="category.name", read_only=True)
     subcategory_name = serializers.SerializerMethodField()
     organizations = serializers.SerializerMethodField()
@@ -80,11 +85,17 @@ class NomenclatureSerializer(serializers.ModelSerializer):
     class Meta:
         model = Nomenclature
         fields = [
-            "id", "operation_type", "operation_type_name", "category", "category_name",
+            "id", "operation_types", "operation_types_detail", "operation_type_name", "category", "category_name",
             "subcategory", "subcategory_name", "name", "unit", "note",
             "organizations", "organization_ids", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+    def get_operation_types_detail(self, obj):
+        return [{"id": o.id, "name": o.name} for o in sorted(obj.operation_types.all(), key=lambda o: o.id)]
+
+    def get_operation_type_name(self, obj):
+        return ", ".join(o["name"] for o in self.get_operation_types_detail(obj))
 
     def get_subcategory_name(self, obj):
         return obj.subcategory.name if obj.subcategory_id else ""
@@ -106,13 +117,18 @@ class NomenclatureSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         orgs = validated_data.pop("organizations", [])
+        ops = validated_data.pop("operation_types", [])
         obj = super().create(validated_data)
         obj.organizations.set(orgs)
+        obj.operation_types.set(ops)
         return obj
 
     def update(self, instance, validated_data):
         orgs = validated_data.pop("organizations", None)
+        ops = validated_data.pop("operation_types", None)
         obj = super().update(instance, validated_data)
+        if ops is not None:
+            obj.operation_types.set(ops)
         if orgs is not None:
             obj.organizations.set(orgs)
         return obj
@@ -122,7 +138,7 @@ def _filter(qs, params):
     q = (params.get("q") or params.get("search") or "").strip()
     if q:
         qs = qs.filter(Q(name__icontains=q) | Q(note__icontains=q))
-    for key, field in (("operation_type", "operation_type_id"), ("category", "category_id"),
+    for key, field in (("operation_type", "operation_types__id"), ("category", "category_id"),
                        ("subcategory", "subcategory_id")):
         val = params.get(key)
         if val and val.isdigit():
@@ -240,6 +256,8 @@ class CatalogDetailView(CatalogView):
     def delete(self, request, pk):
         _need_admin(request.user)
         obj = get_object_or_404(self._model(), pk=pk)
+        if self.kind == "operation-types" and obj.nomenclatures.exists():
+            raise ValidationError({"detail": "Bu qeyd nomenklaturada istifadə olunur, silmək olmaz."})
         label = f"{self.kind}: id={obj.id} ad={obj.name!r}"
         try:
             obj.delete()
@@ -258,7 +276,7 @@ class OrganizationNomenclatureView(APIView):
         org = get_visible_organization(request, pk)
         qs = _filter(
             Nomenclature.objects.filter(organizations=org)
-            .select_related("operation_type", "category", "subcategory").prefetch_related("organizations"),
+            .select_related("category", "subcategory").prefetch_related("organizations", "operation_types"),
             request.query_params,
         )
         return Response(NomenclatureSerializer(qs, many=True).data)

@@ -19,7 +19,8 @@ from organizations.models import (
 
 OPERATION_TYPES = ["İdxal", "İxrac", "ƏDV azad olma", "Satış", "İstehsal"]
 
-# (kateqoriya, alt kateqoriya, ad, ölçü vahidi, əməliyyat növü, qeyd)
+# (kateqoriya, alt kateqoriya, ad, ölçü vahidi, əsas əməliyyat növü, qeyd)
+# Əlavə əməliyyat növləri seed zamanı avtomatik əlavə olunur (hər mövqe üçün cəmi 2-3).
 DATA = [
     # --- 1. Fərdi qoruyucu vasitələr
     ("Fərdi qoruyucu vasitələr", "Bronejiletlər və plitələr", "Taktiki bronejilet (qoruyucu jilet)", "ədəd", "İstehsal", "Sertifikatlı, seriyalı istehsal; ölçü qrupları S-XXL."),
@@ -106,9 +107,14 @@ class Command(BaseCommand):
             if (cat, sub) not in subs:
                 subs[(cat, sub)] = NomenclatureSubcategory.objects.get_or_create(category=cats[cat], name=sub)[0]
             obj, was_created = Nomenclature.objects.get_or_create(
-                name=name, category=cats[cat], operation_type=ops[op],
+                name=name, category=cats[cat],
                 defaults={"subcategory": subs[(cat, sub)], "unit": unit, "note": note},
             )
+            # Hər mövqe 2-3 əməliyyat növünə aiddir: cədvəldəki əsas növ + 1-2 əlavə növ (hər dəfə eyni nəticə).
+            # Mövcud mövqelərə də əlavə olunur (silinmir).
+            extra_rng = random.Random(name)
+            others = [o for o in OPERATION_TYPES if o != op]
+            obj.operation_types.add(ops[op], *[ops[o] for o in extra_rng.sample(others, k=extra_rng.randint(1, 2))])
             created += int(was_created)
             items.append(obj)
 

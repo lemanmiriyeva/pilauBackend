@@ -203,7 +203,8 @@ class NomenclatureOperationType(models.Model):
 class Nomenclature(models.Model):
     """Ümumi nomenklatura mövqeyi. Bir nomenklatura bir neçə təşkilata, bir təşkilat da bir neçə
     nomenklaturaya bağlana bilər (many-to-many); təşkilatlara admin təyin edir."""
-    operation_type = models.ForeignKey(NomenclatureOperationType, on_delete=models.PROTECT, related_name="nomenclatures")
+    # Bir nomenklatura bir neçə əməliyyat növünə aid ola bilər (məs. İdxal + Satış + İstehsal).
+    operation_types = models.ManyToManyField(NomenclatureOperationType, related_name="nomenclatures")
     category = models.ForeignKey(NomenclatureCategory, on_delete=models.PROTECT, related_name="nomenclatures")
     subcategory = models.ForeignKey(
         NomenclatureSubcategory, on_delete=models.PROTECT, related_name="nomenclatures", null=True, blank=True,

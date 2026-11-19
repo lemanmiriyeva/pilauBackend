@@ -25,7 +25,7 @@ class NomenclatureApiTests(APITestCase):
         op, cat, sub = self._catalog()
         again = self.client.post(self.base + "nomenclature-catalog/categories/", {"name": "silah"}, format="json").json()
         self.assertEqual(again["id"], cat["id"])  # təkrar yaranmır
-        payload = {"operation_type": op["id"], "category": cat["id"], "subcategory": sub["id"],
+        payload = {"operation_types": [op["id"]], "category": cat["id"], "subcategory": sub["id"],
                    "name": "Makarov", "unit": "ədəd", "organization_ids": [self.org1.id, self.org2.id]}
         r = self.client.post(self.base + "nomenclatures/", payload, format="json")
         self.assertEqual(r.status_code, 201, r.content)
@@ -43,13 +43,13 @@ class NomenclatureApiTests(APITestCase):
     def test_subcategory_must_match_category(self):
         op, cat, sub = self._catalog()
         other = self.client.post(self.base + "nomenclature-catalog/categories/", {"name": "Texnika"}, format="json").json()
-        r = self.client.post(self.base + "nomenclatures/", {"operation_type": op["id"], "category": other["id"],
+        r = self.client.post(self.base + "nomenclatures/", {"operation_types": [op["id"]], "category": other["id"],
                                                             "subcategory": sub["id"], "name": "X"}, format="json")
         self.assertEqual(r.status_code, 400)
 
     def test_assign_and_unassign(self):
         op, cat, sub = self._catalog()
-        n = self.client.post(self.base + "nomenclatures/", {"operation_type": op["id"], "category": cat["id"],
+        n = self.client.post(self.base + "nomenclatures/", {"operation_types": [op["id"]], "category": cat["id"],
                                                             "name": "Y"}, format="json").json()
         self.client.post(f"{self.base}{self.org2.id}/nomenclature/", {"nomenclature_ids": [n["id"]]}, format="json")
         self.assertEqual(self.org2.nomenclatures.count(), 1)
@@ -61,7 +61,7 @@ class NomenclatureAuditTests(NomenclatureApiTests):
     def test_changes_are_logged(self):
         from audit.models import AuditLog
         op, cat, sub = self._catalog()
-        r = self.client.post(self.base + "nomenclatures/", {"operation_type": op["id"], "category": cat["id"],
+        r = self.client.post(self.base + "nomenclatures/", {"operation_types": [op["id"]], "category": cat["id"],
                                                             "name": "Z", "note": "a"}, format="json").json()
         self.client.patch(f"{self.base}nomenclatures/{r['id']}/", {"note": "b"}, format="json")
         self.client.post(f"{self.base}{self.org1.id}/nomenclature/", {"nomenclature_ids": [r["id"]]}, format="json")
@@ -122,3 +122,43 @@ class OrganizationPatchRoundTripTests(APITestCase):
         org.refresh_from_db()
         self.assertEqual(org.full_name, "RT 2")
         self.assertEqual(org.authorized_persons.count(), 1)
+
+
+class NomenclatureMultiOperationTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user("adm2", "a2@x.az", "pw", is_staff=True)
+        self.client.force_authenticate(self.admin)
+        self.base = "/api/organizations/"
+
+    def _cat(self, url, **data):
+        return self.client.post(self.base + "nomenclature-catalog/" + url, data, format="json").json()
+
+    def test_multiple_operations(self):
+        ops = [self._cat("operation-types/", name=n) for n in ("İdxal", "Satış", "İstehsal")]
+        cat = self._cat("categories/", name="Optika")
+        r = self.client.post(self.base + "nomenclatures/", {
+            "operation_types": [o["id"] for o in ops[:3]], "category": cat["id"], "name": "Dürbün",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        body = r.json()
+        self.assertEqual(len(body["operation_types"]), 3)
+        self.assertEqual(body["operation_type_name"], "İdxal, Satış, İstehsal")
+        # filtr: əməliyyat növü üzrə
+        res = self.client.get(self.base + f"nomenclatures/?operation_type={ops[1]['id']}").json()
+        self.assertEqual(len(res), 1)
+        # redaktə: ikisinə endir
+        r = self.client.patch(self.base + f"nomenclatures/{body['id']}/",
+                              {"operation_types": [ops[0]["id"], ops[2]["id"]]}, format="json")
+        self.assertEqual(len(r.json()["operation_types"]), 2)
+        # boş ola bilməz
+        r = self.client.patch(self.base + f"nomenclatures/{body['id']}/", {"operation_types": []}, format="json")
+        self.assertEqual(r.status_code, 400)
+        # istifadədə olan əməliyyat növü silinmir
+        r = self.client.delete(self.base + f"nomenclature-catalog/operation-types/{ops[0]['id']}/")
+        self.assertEqual(r.status_code, 400)
+
+    def test_seed_gives_2_or_3_operations(self):
+        from django.core.management import call_command
+        call_command("seed_nomenclature", verbosity=0)
+        counts = {n.operation_types.count() for n in Nomenclature.objects.all()}
+        self.assertTrue(counts and counts <= {2, 3}, counts)
