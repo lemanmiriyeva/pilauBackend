@@ -12,6 +12,8 @@ class Module(models.Model):
         ("local_shipping", "Nəqliyyat/Satış"),
         ("import_export", "İdxal-İxrac"),
         ("percent", "Güzəşt"),
+        ("swap_horiz", "Dövriyyə"),
+        ("fact_check", "Təsdiq axını"),
     ]
 
     parent = models.ForeignKey(
