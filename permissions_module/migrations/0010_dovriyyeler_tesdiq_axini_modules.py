@@ -12,16 +12,7 @@ def add_modules(apps, schema_editor):
             "icon": "swap_horiz", "order": 6,
         },
     )
-    # Təsdiq axını - sidebar-da ayrıca düymə (yalnız Nazirlik adminləri görür/istifadə edir)
-    Module.objects.get_or_create(
-        key="tesdiq-axini", parent=None,
-        defaults={
-            "title": "Təsdiq axını",
-            "description": "Sənəd növləri üzrə təsdiq axınının və imzalayanın konfiqurasiyası.",
-            "icon": "fact_check", "order": 7,
-        },
-    )
-    # İnzibatçı panelində də düymə
+    # Təsdiq axını - yalnız İnzibatçı panelinin daxilində (sidebar-da ayrıca modul YOXDUR)
     panel = Module.objects.filter(key="inzibatci-paneli", parent=None).first()
     if panel:
         Module.objects.get_or_create(
@@ -37,7 +28,6 @@ def add_modules(apps, schema_editor):
 def remove_modules(apps, schema_editor):
     Module = apps.get_model("permissions_module", "Module")
     Module.objects.filter(key="dovriyyeler", parent=None).delete()
-    Module.objects.filter(key="tesdiq-axini", parent=None).delete()
 
 
 class Migration(migrations.Migration):
